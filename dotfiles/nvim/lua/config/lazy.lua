@@ -72,15 +72,38 @@ end
 
 require("lazy").setup({
   {
+    "folke/which-key.nvim",
+    event = "VeryLazy",
+    opts = {
+      delay = 300,
+      spec = {
+        { "<leader>c", group = "config/code" },
+        { "<leader>d", group = "debug/diagnostics" },
+        { "<leader>f", group = "find/files" },
+        { "<leader>l", group = "LSP" },
+      },
+    },
+  },
+
+  {
     "ibhagwan/fzf-lua",
     dependencies = { "nvim-tree/nvim-web-devicons" },
     opts = {},
     keys = {
+      { "<C-p>", function() require("fzf-lua").files() end, desc = "Find files" },
       { "<leader>ff", function() require("fzf-lua").files() end, desc = "Find files" },
       { "<leader>fg", function() require("fzf-lua").live_grep() end, desc = "Live grep" },
       { "<leader>fb", function() require("fzf-lua").buffers() end, desc = "Buffers" },
       { "<leader>fr", function() require("fzf-lua").oldfiles() end, desc = "Recent files" },
+      { "<leader>p", function() require("fzf-lua").lsp_document_symbols() end, desc = "Document symbols" },
       { "<leader>fs", function() require("fzf-lua").lsp_document_symbols() end, desc = "Document symbols" },
+      { "<leader>fS", function() require("fzf-lua").lsp_workspace_symbols() end, desc = "Workspace symbols" },
+      { "<leader>cn", function()
+          require("fzf-lua").files({
+            cwd = vim.fn.stdpath("config"),
+            prompt = "Neovim config> ",
+          })
+        end, desc = "Config: Neovim" },
     },
   },
 
@@ -94,6 +117,15 @@ require("lazy").setup({
       { "-", "<cmd>Oil<CR>", desc = "Parent directory" },
       { "<leader>fo", "<cmd>Oil<CR>", desc = "Oil" },
     },
+  },
+
+  {
+    "Mofiqul/dracula.nvim",
+    lazy = false,
+    priority = 1000,
+    config = function()
+      vim.cmd.colorscheme("dracula")
+    end,
   },
 
   { "lewis6991/gitsigns.nvim", opts = {} },
@@ -122,7 +154,7 @@ require("lazy").setup({
             analysis = {
               autoSearchPaths = true,
               useLibraryCodeForTypes = true,
-              typeCheckingMode = "basic",
+              typeCheckingMode = "standard",
             },
           },
         },
@@ -131,6 +163,19 @@ require("lazy").setup({
       vim.lsp.config("ruff", { capabilities = capabilities })
       vim.lsp.enable("pyright")
       vim.lsp.enable("ruff")
+
+      local format_group = vim.api.nvim_create_augroup("RuffFormatOnSave", { clear = true })
+      vim.api.nvim_create_autocmd("BufWritePre", {
+        group = format_group,
+        pattern = "*.py",
+        callback = function(args)
+          vim.lsp.buf.format({
+            bufnr = args.buf,
+            async = false,
+            filter = function(client) return client.name == "ruff" end,
+          })
+        end,
+      })
 
       vim.api.nvim_create_autocmd("LspAttach", {
         callback = function(args)
@@ -180,6 +225,40 @@ require("lazy").setup({
       vim.keymap.set("n", "<leader>dr", dap.repl.open, { desc = "Debug REPL" })
       vim.keymap.set("n", "<leader>dt", function() require("dap-python").test_method() end, { desc = "Debug test method" })
     end,
+  },
+  {
+  "nvim-neo-tree/neo-tree.nvim",
+  branch = "v3.x",
+  dependencies = {
+    "nvim-lua/plenary.nvim",
+    "MunifTanjim/nui.nvim",
+    "nvim-tree/nvim-web-devicons",
+  },
+  config = function()
+    require("neo-tree").setup({
+      filesystem = {
+        follow_current_file = {
+          enabled = true,
+        },
+        use_libuv_file_watcher = true,
+      },
+      window = {
+            position = "left",
+            width = 34,
+        mappings = {
+            ["l"] = "open",
+            ["h"] = "close_node",
+        },
+      },
+    })
+  end,
+  keys = {
+    {
+      "<leader>e",
+      "<cmd>Neotree toggle filesystem reveal left<cr>",
+      desc = "Explorer",
+    },
+   },
   },
 }, {
   checker = { enabled = false },

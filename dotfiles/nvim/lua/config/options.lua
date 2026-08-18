@@ -18,6 +18,21 @@ opt.sidescrolloff = 5
 opt.completeopt = { "menu", "menuone", "noselect" }
 opt.termguicolors = true
 
+-- Coding defaults. Python and most source files use 4 spaces; YAML uses 2.
+opt.expandtab = true
+opt.tabstop = 4
+opt.shiftwidth = 4
+opt.softtabstop = 4
+
+vim.api.nvim_create_autocmd("FileType", {
+  pattern = { "yaml" },
+  callback = function()
+    vim.opt_local.tabstop = 2
+    vim.opt_local.shiftwidth = 2
+    vim.opt_local.softtabstop = 2
+  end,
+})
+
 vim.diagnostic.config({
   virtual_text = true,
   signs = true,

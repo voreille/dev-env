@@ -116,15 +116,38 @@ This lets you learn Neovim, Yazi, fuzzy search, lazygit and DAP without simultan
 
 ## Files and search
 
-Inside Neovim:
+Inside Neovim, `Space` is the leader and `,` is the local leader. Pause briefly after pressing `Space` to see available mappings through which-key.
 
 ```text
-<leader>ff    find files
-<leader>fg    grep project text
-<leader>fb    buffers
-<leader>fr    recent files
+Ctrl-p        find files
+Space p       document symbols/functions
+Space f S     workspace symbols
+Space f g     grep project text
+Space f b     buffers
+Space f r     recent files
+
+gd            go to definition
+gD            go to declaration
+gr            references
+K             hover documentation
+Ctrl-o        jump back
+Ctrl-i        jump forward
+
+Space r n     rename symbol
+Space c a     code action
+Space l f     format
+
+Space c n     browse/edit Neovim config
+Space c b     edit dev-env bash config
+
+Space d p     previous diagnostic
+Space d n     next diagnostic
+Space d e     diagnostic details
+
 -             open Oil at the current file
 ```
+
+Python files are formatted by Ruff on save. Pyright uses `standard` type checking. The Dracula colorscheme is enabled by default.
 
 From the shell:
 
