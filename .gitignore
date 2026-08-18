@@ -1,6 +1,3 @@
-*.swp
-*.swo
+# Neovim/Yazi/plugin state lives outside the repo.
 .DS_Store
-
-# Temporary output from local experiments; lock files are intentionally tracked.
-environments/*/requirements.generated.txt
+*.swp

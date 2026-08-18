@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+set -u
+
+SOURCE="$(readlink -f "${BASH_SOURCE[0]}")"
+ROOT="$(cd "$(dirname "$SOURCE")/.." && pwd)"
+PREFIX="${DEV_ENV_PREFIX:-$HOME/.local}"
+BIN_DIR="$PREFIX/bin"
+
+printf 'dev-env: %s\n\n' "$ROOT"
+
+ok=1
+check() {
+  local name="$1" cmd="$2"
+  if command -v "$cmd" >/dev/null 2>&1; then
+    printf '[ok]   %-12s %s\n' "$name" "$(command -v "$cmd")"
+  elif [[ -x "$BIN_DIR/$cmd" ]]; then
+    printf '[ok]   %-12s %s (not currently on PATH)\n' "$name" "$BIN_DIR/$cmd"
+  else
+    printf '[miss] %-12s\n' "$name"
+    ok=0
+  fi
+}
+
+check Neovim nvim
+check Yazi yazi
+check lazygit lazygit
+check ripgrep rg
+check fd fd
+check fzf fzf
+check uv uv
+check Pyright pyright-langserver
+check Ruff ruff
+check debugpy debugpy
+
+printf '\nHost/infrastructure tools:\n'
+for cmd in git ssh python3 conda tmux docker; do
+  if command -v "$cmd" >/dev/null 2>&1; then
+    printf '[ok]   %-12s %s\n' "$cmd" "$(command -v "$cmd")"
+  else
+    printf '[info] %-12s not found\n' "$cmd"
+  fi
+done
+
+printf '\nConfig:\n'
+for target in "$HOME/.config/nvim" "$HOME/.config/yazi" "$HOME/.config/dev-env/bashrc"; do
+  if [[ -e "$target" || -L "$target" ]]; then printf '[ok]   %s\n' "$target"; else printf '[miss] %s\n' "$target"; ok=0; fi
+done
+
+if [[ "$ok" == 1 ]]; then
+  printf '\nEverything required by the host IDE setup looks available.\n'
+else
+  printf '\nSome host IDE components are missing. Re-run: %s/bootstrap.sh\n' "$ROOT"
+  exit 1
+fi

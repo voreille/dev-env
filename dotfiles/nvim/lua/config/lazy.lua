@@ -10,18 +10,50 @@ if not vim.uv.fs_stat(lazypath) then
 end
 vim.opt.rtp:prepend(lazypath)
 
-local function python_adapter()
-  if vim.fn.executable("/opt/dev-tools/bin/python") == 1 then
-    return "/opt/dev-tools/bin/python"
+local function project_python()
+  local candidates = {}
+
+  if vim.env.VIRTUAL_ENV and vim.env.VIRTUAL_ENV ~= "" then
+    table.insert(candidates, vim.env.VIRTUAL_ENV .. "/bin/python")
+  end
+  if vim.env.CONDA_PREFIX and vim.env.CONDA_PREFIX ~= "" then
+    table.insert(candidates, vim.env.CONDA_PREFIX .. "/bin/python")
+  end
+
+  local local_venv = vim.fn.getcwd() .. "/.venv/bin/python"
+  table.insert(candidates, local_venv)
+  table.insert(candidates, vim.fn.expand("~/.local/share/dev-env/python-tools/bin/python"))
+  table.insert(candidates, vim.fn.exepath("python3"))
+
+  for _, python in ipairs(candidates) do
+    if python and python ~= "" and vim.fn.executable(python) == 1 then
+      return python
+    end
   end
   return "python3"
 end
 
+local function debug_python()
+  local candidates = {
+    project_python(),
+    vim.fn.expand("~/.local/share/dev-env/python-tools/bin/python"),
+  }
+
+  for _, python in ipairs(candidates) do
+    if python and vim.fn.executable(python) == 1 then
+      vim.fn.system({ python, "-c", "import debugpy" })
+      if vim.v.shell_error == 0 then
+        return python
+      end
+    end
+  end
+
+  return project_python()
+end
+
 local function add_remote_python_targets(dap)
   local spec = vim.env.DAP_PYTHON_TARGETS
-  if not spec or spec == "" then
-    return
-  end
+  if not spec or spec == "" then return end
 
   dap.configurations.python = dap.configurations.python or {}
   for item in string.gmatch(spec, "[^,]+") do
@@ -80,19 +112,17 @@ require("lazy").setup({
     "neovim/nvim-lspconfig",
     config = function()
       local capabilities = require("blink.cmp").get_lsp_capabilities()
+      local python = project_python()
 
-      local has_research_venv = vim.fn.isdirectory("/opt/venv") == 1
       vim.lsp.config("pyright", {
         capabilities = capabilities,
         settings = {
           python = {
+            pythonPath = python,
             analysis = {
               autoSearchPaths = true,
               useLibraryCodeForTypes = true,
               typeCheckingMode = "basic",
-              -- A standalone IDE service intentionally does not mirror application
-              -- dependencies, so avoid noisy third-party import diagnostics there.
-              reportMissingImports = has_research_venv and "error" or "none",
             },
           },
         },
@@ -131,7 +161,7 @@ require("lazy").setup({
       local dap = require("dap")
       local dapui = require("dapui")
 
-      require("dap-python").setup(python_adapter())
+      require("dap-python").setup(debug_python())
       require("dap-python").test_runner = "pytest"
       add_remote_python_targets(dap)
       dapui.setup()
