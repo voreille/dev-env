@@ -1,136 +1,125 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DEV_ENV_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SOURCE="$(readlink -f "${BASH_SOURCE[0]}")"
+DEV_ENV_ROOT="$(cd "$(dirname "$SOURCE")/.." && pwd)"
 WORKSPACES_ROOT="${DEV_WORKSPACES_ROOT:-$HOME/workspaces}"
-DEFAULT_VARIANT="${DEV_VARIANT:-cuda}"
-NAS_MODE="${DEV_NAS_MODE:-rw}"
 CACHE_ROOT="${DEV_CACHE_ROOT:-$HOME/.cache/dev-env}"
-
-CPU_BASE_TAG="${DEV_CPU_BASE_TAG:-dev-env-base:cpu}"
-CPU_TAG="${DEV_CPU_TAG:-dev-env:cpu}"
-CUDA_BASE_TAG="${DEV_CUDA_BASE_TAG:-dev-env-base:cuda12.3}"
-CUDA_TAG="${DEV_CUDA_TAG:-dev-env:cuda12.3}"
-CUDA_BASE_IMAGE="${DEV_CUDA_BASE_IMAGE:-nvidia/cuda:12.3.2-cudnn9-runtime-ubuntu22.04}"
-CPU_BASE_IMAGE="${DEV_CPU_BASE_IMAGE:-ubuntu:22.04}"
+NAS_MODE="${DEV_NAS_MODE:-rw}"
+IDE_IMAGE="${DEV_IDE_IMAGE:-dev-env:ide}"
+IDE_CONTAINER="${DEV_IDE_CONTAINER:-dev-ide}"
+IDE_BASE_IMAGE="${DEV_IDE_BASE_IMAGE:-ubuntu:24.04}"
+UV_VERSION="${DEV_UV_VERSION:-0.12.5}"
 
 usage() {
   cat <<'USAGE'
-Usage:
-  dev build [cpu|cuda|all]
-  dev start [cpu|cuda]
-  dev shell [cpu|cuda]
-  dev nvim [cpu|cuda] [path]
-  dev yazi [cpu|cuda] [path]
-  dev exec [cpu|cuda] -- <command...>
-  dev stop [cpu|cuda]
-  dev rm [cpu|cuda]
-  dev status [cpu|cuda]
+Named research environments + reusable terminal IDE stack.
 
-Environment overrides:
-  DEV_IMAGE=<image>              Use a project-specific image instead of dev-env:*
-  DEV_VARIANT=cpu|cuda           Default variant (default: cuda)
-  DEV_WORKSPACES_ROOT=<path>     Host workspace root (default: ~/workspaces)
-  DEV_NAS_MODE=rw|ro             /mnt/nas* mount mode (default: rw)
-  DEV_GPUS=<docker --gpus value> GPU selection (default: all)
-  DEV_DOCKER_ARGS='...'          Extra docker run args, e.g. '-p 8090:8090'
-  DEV_CONTAINER_NAME=<name>      Override inferred project container name
+Generic IDE image (for Compose projects such as HistoSeg):
+  dev ide build
+  dev ide shell
+  dev ide nvim [path]
+  dev ide yazi [path]
+  dev ide stop|rm|status
+  dev ide image
+
+Named research environments:
+  dev create NAME [--base ALIAS|IMAGE] [--python VERSION] [--gpus VALUE]
+  dev bases
+  dev list
+  dev lock NAME [--upgrade]
+  dev add NAME PACKAGE [PACKAGE...]
+  dev build NAME
+  dev rebuild NAME
+  dev shell NAME
+  dev nvim NAME [path]
+  dev yazi NAME [path]
+  dev exec NAME -- <command...>
+  dev install NAME [repo-path]
+  dev stop NAME
+  dev rm NAME
+  dev status NAME
+
+Environment specification:
+  environments/NAME/env.conf
+  environments/NAME/requirements.in
+  environments/NAME/requirements.lock.txt
+  environments/NAME/system-packages.txt
 
 Examples:
-  dev build all
-  cd ~/workspaces/histoseg-plugin
-  dev shell cuda
-  dev nvim cuda .
-  DEV_IMAGE=histoseg-dev dev shell cuda
-  DEV_DOCKER_ARGS='-p 8090:8090 -p 5679:5679' dev start cuda
+  dev create histo --base cuda12.3 --python 3.10 --gpus all
+  dev add histo numpy 'pandas>=2' scikit-learn
+  dev build histo
+
+  cd ~/workspaces/plism
+  dev nvim histo .
+  dev install histo .
+
+  # Generic IDE service image for a multi-container project:
+  dev ide build
+  docker compose -f compose.yml -f compose.ide.override.yml up -d
+  docker compose exec ide nvim .
+
+Environment overrides:
+  DEV_WORKSPACES_ROOT=<path>  default: ~/workspaces
+  DEV_NAS_MODE=rw|ro          default: rw
+  DEV_GPUS=<value>            override env.conf GPU selection
+  DEV_DOCKER_ARGS='...'       extra docker run arguments
+  DEV_CACHE_ROOT=<path>       default: ~/.cache/dev-env
 USAGE
 }
 
-variant_or_default() {
-  local value="${1:-$DEFAULT_VARIANT}"
-  case "$value" in
-    cpu|cuda) printf '%s\n' "$value" ;;
-    *) echo "Expected variant 'cpu' or 'cuda', got: $value" >&2; exit 2 ;;
-  esac
+sanitize_name() {
+  local name="$1"
+  if [[ ! "$name" =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$ ]]; then
+    echo "Invalid environment name '$name'. Use letters, digits, _, . or -." >&2
+    exit 2
+  fi
+  printf '%s\n' "$name"
 }
 
-project_name() {
+env_dir() {
   local name
-  if [[ "$PWD" == "$WORKSPACES_ROOT" || "$PWD" == "$WORKSPACES_ROOT"/* ]]; then
-    name="$(basename "$PWD")"
-  else
-    name="$(basename "$PWD")"
-  fi
-  name="$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9_.-]+/-/g; s/^-+|-+$//g')"
-  printf '%s\n' "${name:-workspace}"
+  name="$(sanitize_name "$1")"
+  printf '%s/environments/%s\n' "$DEV_ENV_ROOT" "$name"
 }
 
-container_name() {
-  local variant="$1"
-  if [[ -n "${DEV_CONTAINER_NAME:-}" ]]; then
-    printf '%s\n' "$DEV_CONTAINER_NAME"
-  else
-    printf 'dev-%s-%s\n' "$(project_name)" "$variant"
+resolve_base() {
+  local requested="$1"
+  local aliases="$DEV_ENV_ROOT/config/bases.conf"
+  local resolved=""
+  if [[ -f "$aliases" ]]; then
+    resolved="$(awk -F= -v key="$requested" '$1 == key {sub(/^[^=]*=/, ""); print; exit}' "$aliases")"
   fi
-}
-
-image_for() {
-  local variant="$1"
-  if [[ -n "${DEV_IMAGE:-}" ]]; then
-    printf '%s\n' "$DEV_IMAGE"
-  elif [[ "$variant" == cuda ]]; then
-    printf '%s\n' "$CUDA_TAG"
+  if [[ -n "$resolved" ]]; then
+    printf '%s\n' "$resolved"
   else
-    printf '%s\n' "$CPU_TAG"
+    printf '%s\n' "$requested"
   fi
 }
 
-workdir_for_container() {
-  if [[ "$PWD" == "$WORKSPACES_ROOT" ]]; then
-    printf '%s\n' "$WORKSPACES_ROOT"
-  elif [[ "$PWD" == "$WORKSPACES_ROOT"/* ]]; then
-    # ~/workspaces is mounted at the same absolute location inside the container.
-    printf '%s\n' "$PWD"
-  else
-    printf '%s\n' "$WORKSPACES_ROOT"
-  fi
-}
+load_env() {
+  local name="$1"
+  local dir
+  dir="$(env_dir "$name")"
+  [[ -f "$dir/env.conf" ]] || { echo "Unknown environment '$name'. Run: dev create $name ..." >&2; exit 1; }
 
-build_base() {
-  local variant="$1"
-  local base_image base_tag final_tag final_dockerfile
-  if [[ "$variant" == cpu ]]; then
-    base_image="$CPU_BASE_IMAGE"
-    base_tag="$CPU_BASE_TAG"
-    final_tag="$CPU_TAG"
-    final_dockerfile="$DEV_ENV_ROOT/docker/Dockerfile.cpu"
-  else
-    base_image="$CUDA_BASE_IMAGE"
-    base_tag="$CUDA_BASE_TAG"
-    final_tag="$CUDA_TAG"
-    final_dockerfile="$DEV_ENV_ROOT/docker/Dockerfile.cuda"
-  fi
+  BASE_IMAGE=""
+  PYTHON_VERSION="3.12"
+  GPUS="none"
+  # env.conf is part of this trusted local repository and intentionally uses shell assignments.
+  # shellcheck disable=SC1090
+  source "$dir/env.conf"
 
-  echo "Building $base_tag from $base_image"
-  docker build \
-    -f "$DEV_ENV_ROOT/docker/Dockerfile.base" \
-    --build-arg "BASE_IMAGE=$base_image" \
-    --build-arg "USER_UID=$(id -u)" \
-    --build-arg "USER_GID=$(id -g)" \
-    -t "$base_tag" \
-    "$DEV_ENV_ROOT"
-
-  echo "Building $final_tag"
-  docker build \
-    -f "$final_dockerfile" \
-    --build-arg "BASE_IMAGE=$base_tag" \
-    -t "$final_tag" \
-    "$DEV_ENV_ROOT"
+  [[ -n "$BASE_IMAGE" ]] || { echo "$dir/env.conf does not define BASE_IMAGE" >&2; exit 1; }
+  BASE_IMAGE="$(resolve_base "$BASE_IMAGE")"
+  ENV_DIR="$dir"
+  ENV_IMAGE="dev-env:$name"
+  ENV_CONTAINER="dev-$name"
 }
 
 ensure_host_dirs() {
-  mkdir -p "$WORKSPACES_ROOT"
-  mkdir -p \
+  mkdir -p "$WORKSPACES_ROOT" \
     "$CACHE_ROOT/nvim/data" \
     "$CACHE_ROOT/nvim/state" \
     "$CACHE_ROOT/nvim/cache" \
@@ -147,43 +136,20 @@ container_running() {
   [[ "$(docker inspect -f '{{.State.Running}}' "$1" 2>/dev/null || true)" == "true" ]]
 }
 
-start_container() {
-  local variant="$1"
-  local name image workdir
-  name="$(container_name "$variant")"
-  image="$(image_for "$variant")"
-  workdir="$(workdir_for_container)"
+workdir_now() {
+  if [[ "$PWD" == "$WORKSPACES_ROOT" || "$PWD" == "$WORKSPACES_ROOT"/* ]]; then
+    printf '%s\n' "$PWD"
+  else
+    printf '%s\n' "$WORKSPACES_ROOT"
+  fi
+}
 
+append_common_mounts() {
   ensure_host_dirs
 
-  if container_running "$name"; then
-    echo "$name is already running"
-    return 0
-  fi
-  if container_exists "$name"; then
-    docker start "$name" >/dev/null
-    echo "Started existing container: $name"
-    return 0
-  fi
-
-  if ! docker image inspect "$image" >/dev/null 2>&1; then
-    echo "Image '$image' does not exist." >&2
-    if [[ -z "${DEV_IMAGE:-}" ]]; then
-      echo "Run: $0 build $variant" >&2
-    fi
-    exit 1
-  fi
-
-  local -a args
-  args=(
-    run -d
-    --name "$name"
-    --init
-    --ipc=host
-    --workdir "$workdir"
-    --env "TERM=${TERM:-xterm-256color}"
-    --env "DEV_WORKSPACES_ROOT=$WORKSPACES_ROOT"
+  RUN_ARGS+=(
     --mount "type=bind,src=$WORKSPACES_ROOT,dst=$WORKSPACES_ROOT"
+    --mount "type=bind,src=$WORKSPACES_ROOT,dst=/workspaces"
     --mount "type=bind,src=$CACHE_ROOT/nvim/data,dst=/home/dev/.local/share/nvim"
     --mount "type=bind,src=$CACHE_ROOT/nvim/state,dst=/home/dev/.local/state/nvim"
     --mount "type=bind,src=$CACHE_ROOT/nvim/cache,dst=/home/dev/.cache/nvim"
@@ -192,127 +158,363 @@ start_container() {
     --mount "type=bind,src=$CACHE_ROOT/uv,dst=/home/dev/.cache/uv"
   )
 
-  # Convenient canonical alias in addition to preserving host absolute paths.
-  args+=(--mount "type=bind,src=$WORKSPACES_ROOT,dst=/workspaces")
-
-  # Preserve Git identity/config when available without exposing private SSH keys.
   if [[ -f "$HOME/.gitconfig" ]]; then
-    args+=(--mount "type=bind,src=$HOME/.gitconfig,dst=/home/dev/.gitconfig,readonly")
+    RUN_ARGS+=(--mount "type=bind,src=$HOME/.gitconfig,dst=/home/dev/.gitconfig,readonly")
   fi
   if [[ -f "$HOME/.ssh/config" ]]; then
-    args+=(--mount "type=bind,src=$HOME/.ssh/config,dst=/home/dev/.ssh/config,readonly")
+    RUN_ARGS+=(--mount "type=bind,src=$HOME/.ssh/config,dst=/home/dev/.ssh/config,readonly")
   fi
   if [[ -f "$HOME/.ssh/known_hosts" ]]; then
-    args+=(--mount "type=bind,src=$HOME/.ssh/known_hosts,dst=/home/dev/.ssh/known_hosts,readonly")
+    RUN_ARGS+=(--mount "type=bind,src=$HOME/.ssh/known_hosts,dst=/home/dev/.ssh/known_hosts,readonly")
   fi
   if [[ -n "${SSH_AUTH_SOCK:-}" && -S "${SSH_AUTH_SOCK}" ]]; then
-    args+=(
+    RUN_ARGS+=(
       --mount "type=bind,src=$SSH_AUTH_SOCK,dst=/ssh-agent"
       --env SSH_AUTH_SOCK=/ssh-agent
     )
   fi
 
-  # Mount every currently available /mnt/nas* directory at the identical path.
   local nas
   shopt -s nullglob
   for nas in /mnt/nas*; do
     [[ -d "$nas" ]] || continue
     if [[ "$NAS_MODE" == ro ]]; then
-      args+=(--mount "type=bind,src=$nas,dst=$nas,readonly")
+      RUN_ARGS+=(--mount "type=bind,src=$nas,dst=$nas,readonly")
     else
-      args+=(--mount "type=bind,src=$nas,dst=$nas")
+      RUN_ARGS+=(--mount "type=bind,src=$nas,dst=$nas")
     fi
   done
   shopt -u nullglob
 
-  if [[ "$variant" == cuda ]]; then
-    args+=(--gpus "${DEV_GPUS:-all}")
-  fi
-
   if [[ -n "${DEV_DOCKER_ARGS:-}" ]]; then
-    # Intentional shell-style splitting for user-provided docker CLI flags.
+    # Intentional shell-style splitting for user-provided Docker flags.
     # shellcheck disable=SC2206
     local extra=( ${DEV_DOCKER_ARGS} )
-    args+=("${extra[@]}")
+    RUN_ARGS+=("${extra[@]}")
   fi
-
-  args+=("$image")
-
-  docker "${args[@]}" >/dev/null
-  echo "Started $name ($image)"
-  echo "workdir: $workdir"
 }
 
-exec_in() {
-  local variant="$1"; shift
-  local name
-  name="$(container_name "$variant")"
-  start_container "$variant" >/dev/null
-  docker exec -it --workdir "$(workdir_for_container)" "$name" "$@"
+build_ide() {
+  echo "Building $IDE_IMAGE from $IDE_BASE_IMAGE"
+  docker build \
+    -f "$DEV_ENV_ROOT/docker/Dockerfile.ide" \
+    --build-arg "BASE_IMAGE=$IDE_BASE_IMAGE" \
+    --build-arg "USER_UID=$(id -u)" \
+    --build-arg "USER_GID=$(id -g)" \
+    --build-arg "UV_VERSION=$UV_VERSION" \
+    -t "$IDE_IMAGE" \
+    "$DEV_ENV_ROOT"
+}
+
+start_ide() {
+  ensure_host_dirs
+  if container_running "$IDE_CONTAINER"; then return 0; fi
+  if container_exists "$IDE_CONTAINER"; then docker start "$IDE_CONTAINER" >/dev/null; return 0; fi
+  docker image inspect "$IDE_IMAGE" >/dev/null 2>&1 || { echo "Missing $IDE_IMAGE. Run: dev ide build" >&2; exit 1; }
+
+  RUN_ARGS=(run -d --name "$IDE_CONTAINER" --init --workdir "$(workdir_now)")
+  append_common_mounts
+  RUN_ARGS+=("$IDE_IMAGE")
+  docker "${RUN_ARGS[@]}" >/dev/null
+  echo "Started $IDE_CONTAINER"
+}
+
+exec_ide() {
+  start_ide >/dev/null
+  docker exec -it --workdir "$(workdir_now)" "$IDE_CONTAINER" "$@"
+}
+
+create_env() {
+  local name="$1"; shift
+  local base="ubuntu24.04"
+  local python="3.12"
+  local gpus="none"
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --base) base="${2:?--base requires a value}"; shift 2 ;;
+      --python) python="${2:?--python requires a value}"; shift 2 ;;
+      --gpus) gpus="${2:?--gpus requires a value}"; shift 2 ;;
+      *) echo "Unknown create option: $1" >&2; exit 2 ;;
+    esac
+  done
+
+  local dir
+  dir="$(env_dir "$name")"
+  [[ ! -e "$dir" ]] || { echo "$dir already exists" >&2; exit 1; }
+  mkdir -p "$dir"
+
+  cat > "$dir/env.conf" <<EOF_CONF
+# Base aliases are defined in config/bases.conf; full image references also work.
+BASE_IMAGE="$base"
+PYTHON_VERSION="$python"
+# Use "none" for CPU or a Docker --gpus value such as "all", "device=0", etc.
+GPUS="$gpus"
+EOF_CONF
+
+  cat > "$dir/requirements.in" <<'EOF_REQ'
+# Shared Python dependencies for this named research environment.
+# Keep project-specific dependencies in each repository's pyproject.toml.
+# Example:
+# numpy<2
+# pandas>=2
+EOF_REQ
+
+  cat > "$dir/system-packages.txt" <<'EOF_SYS'
+# Optional apt packages, one per line (or whitespace separated).
+# Example:
+# libopenslide0
+EOF_SYS
+
+  echo "Created environment '$name' in $dir"
+  echo "Edit requirements.in/system-packages.txt, then run: dev lock $name && dev build $name"
+}
+
+lock_env() {
+  local name="$1"
+  local upgrade="${2:-false}"
+  load_env "$name"
+  ensure_host_dirs
+
+  local -a cmd
+  cmd=(
+    docker run --rm
+    --user "$(id -u):$(id -g)"
+    --mount "type=bind,src=$ENV_DIR,dst=/env"
+    --mount "type=bind,src=$CACHE_ROOT/uv,dst=/uv-cache"
+    --env UV_CACHE_DIR=/uv-cache
+    --workdir /env
+    "ghcr.io/astral-sh/uv:${UV_VERSION}"
+    uv pip compile requirements.in
+    --output-file requirements.lock.txt
+    --python-version "$PYTHON_VERSION"
+    --emit-index-url
+  )
+  [[ "$upgrade" == true ]] && cmd+=(--upgrade)
+
+  if ! grep -Eq '^[[:space:]]*[^#[:space:]]' "$ENV_DIR/requirements.in"; then
+    cat > "$ENV_DIR/requirements.lock.txt" <<EOF_EMPTY
+# This file is intentionally empty.
+# Generated by: dev lock $name
+EOF_EMPTY
+    echo "Locked empty environment '$name'."
+    return 0
+  fi
+
+  echo "Locking '$name' for Python $PYTHON_VERSION"
+  "${cmd[@]}"
+}
+
+add_env_packages() {
+  local name="$1"; shift
+  [[ $# -gt 0 ]] || { echo "dev add requires at least one package" >&2; exit 2; }
+  load_env "$name"
+
+  local package
+  for package in "$@"; do
+    if ! grep -Fxq -- "$package" "$ENV_DIR/requirements.in"; then
+      printf '%s\n' "$package" >> "$ENV_DIR/requirements.in"
+    fi
+  done
+  lock_env "$name" false
+
+  if container_running "$ENV_CONTAINER"; then
+    echo "Updating running container $ENV_CONTAINER immediately (the rebuilt image will use the exact lock)."
+    docker exec -it "$ENV_CONTAINER" \
+      uv pip install --python /opt/venv/bin/python "$@"
+  else
+    echo "Specification updated. Run: dev build $name"
+  fi
+}
+
+build_env() {
+  local name="$1"
+  load_env "$name"
+  if [[ ! -f "$ENV_DIR/requirements.lock.txt" || \
+        "$ENV_DIR/requirements.in" -nt "$ENV_DIR/requirements.lock.txt" || \
+        "$ENV_DIR/env.conf" -nt "$ENV_DIR/requirements.lock.txt" ]]; then
+    echo "Lock file is missing or stale; generating it first."
+    lock_env "$name" false
+    load_env "$name"
+  fi
+
+  echo "Building $ENV_IMAGE"
+  echo "  base:   $BASE_IMAGE"
+  echo "  python: $PYTHON_VERSION"
+  docker build \
+    -f "$DEV_ENV_ROOT/docker/Dockerfile.research" \
+    --build-arg "BASE_IMAGE=$BASE_IMAGE" \
+    --build-arg "ENV_NAME=$name" \
+    --build-arg "PYTHON_VERSION=$PYTHON_VERSION" \
+    --build-arg "USER_UID=$(id -u)" \
+    --build-arg "USER_GID=$(id -g)" \
+    --build-arg "UV_VERSION=$UV_VERSION" \
+    -t "$ENV_IMAGE" \
+    "$DEV_ENV_ROOT"
+
+  if container_exists "$ENV_CONTAINER"; then
+    echo "Note: $ENV_CONTAINER already exists and still uses its old image."
+    echo "Run 'dev rebuild $name' next time, or 'dev rm $name' before entering the rebuilt image."
+  fi
+}
+
+start_env() {
+  local name="$1"
+  load_env "$name"
+  ensure_host_dirs
+
+  if container_running "$ENV_CONTAINER"; then return 0; fi
+  if container_exists "$ENV_CONTAINER"; then docker start "$ENV_CONTAINER" >/dev/null; return 0; fi
+  docker image inspect "$ENV_IMAGE" >/dev/null 2>&1 || { echo "Missing $ENV_IMAGE. Run: dev build $name" >&2; exit 1; }
+
+  RUN_ARGS=(
+    run -d
+    --name "$ENV_CONTAINER"
+    --init
+    --ipc=host
+    --workdir "$(workdir_now)"
+    --env "DEV_ENV_NAME=$name"
+  )
+  append_common_mounts
+
+  local gpu_value="${DEV_GPUS:-$GPUS}"
+  if [[ -n "$gpu_value" && "$gpu_value" != "none" ]]; then
+    RUN_ARGS+=(--gpus "$gpu_value")
+  fi
+
+  RUN_ARGS+=("$ENV_IMAGE")
+  docker "${RUN_ARGS[@]}" >/dev/null
+  echo "Started $ENV_CONTAINER ($ENV_IMAGE)"
+}
+
+exec_env() {
+  local name="$1"; shift
+  load_env "$name"
+  start_env "$name" >/dev/null
+  docker exec -it --workdir "$(workdir_now)" "$ENV_CONTAINER" "$@"
+}
+
+install_repo() {
+  local name="$1"
+  local path="${2:-$PWD}"
+  path="$(readlink -f "$path")"
+  [[ -d "$path" ]] || { echo "Repository path does not exist: $path" >&2; exit 1; }
+  if [[ "$path" != "$WORKSPACES_ROOT" && "$path" != "$WORKSPACES_ROOT"/* ]]; then
+    echo "Repository must be below $WORKSPACES_ROOT so it is visible in the container." >&2
+    exit 1
+  fi
+  exec_env "$name" uv pip install --python /opt/venv/bin/python -e "$path"
+}
+
+list_envs() {
+  printf '%-22s %-10s %-8s %-40s\n' NAME PYTHON GPUS BASE
+  local dir name
+  shopt -s nullglob
+  for dir in "$DEV_ENV_ROOT"/environments/*; do
+    [[ -d "$dir" && -f "$dir/env.conf" ]] || continue
+    name="$(basename "$dir")"
+    load_env "$name"
+    printf '%-22s %-10s %-8s %-40s\n' "$name" "$PYTHON_VERSION" "$GPUS" "$BASE_IMAGE"
+  done
+  shopt -u nullglob
+}
+
+show_bases() {
+  cat "$DEV_ENV_ROOT/config/bases.conf"
+}
+
+manage_env_container() {
+  local action="$1" name="$2"
+  load_env "$name"
+  case "$action" in
+    stop)
+      if container_exists "$ENV_CONTAINER"; then docker stop "$ENV_CONTAINER"; else echo "$ENV_CONTAINER does not exist"; fi ;;
+    rm)
+      if container_exists "$ENV_CONTAINER"; then docker rm -f "$ENV_CONTAINER"; else echo "$ENV_CONTAINER does not exist"; fi ;;
+    status)
+      if container_exists "$ENV_CONTAINER"; then
+        docker ps -a --filter "name=^/${ENV_CONTAINER}$" --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}'
+      else
+        echo "$ENV_CONTAINER does not exist"
+      fi ;;
+  esac
 }
 
 cmd="${1:-}"
 case "$cmd" in
-  build)
-    target="${2:-all}"
-    case "$target" in
-      cpu) build_base cpu ;;
-      cuda) build_base cuda ;;
-      all) build_base cpu; build_base cuda ;;
+  ide)
+    sub="${2:-}"
+    case "$sub" in
+      build) build_ide ;;
+      shell) exec_ide bash ;;
+      nvim) exec_ide nvim "${3:-.}" ;;
+      yazi) exec_ide yazi "${3:-.}" ;;
+      image) echo "$IDE_IMAGE" ;;
+      stop)
+        if container_exists "$IDE_CONTAINER"; then docker stop "$IDE_CONTAINER"; else echo "$IDE_CONTAINER does not exist"; fi ;;
+      rm)
+        if container_exists "$IDE_CONTAINER"; then docker rm -f "$IDE_CONTAINER"; else echo "$IDE_CONTAINER does not exist"; fi ;;
+      status)
+        if container_exists "$IDE_CONTAINER"; then docker ps -a --filter "name=^/${IDE_CONTAINER}$" --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}'; else echo "$IDE_CONTAINER does not exist"; fi ;;
       *) usage; exit 2 ;;
     esac
     ;;
-
-  start)
-    variant="$(variant_or_default "${2:-}")"
-    start_container "$variant"
+  create)
+    [[ $# -ge 2 ]] || { usage; exit 2; }
+    name="$2"; shift 2
+    create_env "$name" "$@"
     ;;
-
+  bases) show_bases ;;
+  list) list_envs ;;
+  lock)
+    [[ $# -ge 2 ]] || { usage; exit 2; }
+    upgrade=false
+    [[ "${3:-}" == "--upgrade" ]] && upgrade=true
+    lock_env "$2" "$upgrade"
+    ;;
+  add)
+    [[ $# -ge 3 ]] || { usage; exit 2; }
+    name="$2"; shift 2
+    add_env_packages "$name" "$@"
+    ;;
+  build)
+    [[ $# -eq 2 ]] || { usage; exit 2; }
+    build_env "$2"
+    ;;
+  rebuild)
+    [[ $# -eq 2 ]] || { usage; exit 2; }
+    name="$2"
+    build_env "$name"
+    load_env "$name"
+    if container_exists "$ENV_CONTAINER"; then docker rm -f "$ENV_CONTAINER" >/dev/null; fi
+    echo "Rebuilt $ENV_IMAGE; working container will be recreated on next use."
+    ;;
   shell)
-    variant="$(variant_or_default "${2:-}")"
-    exec_in "$variant" bash
+    [[ $# -eq 2 ]] || { usage; exit 2; }
+    exec_env "$2" bash
     ;;
-
   nvim)
-    variant="$(variant_or_default "${2:-}")"
-    path="${3:-.}"
-    exec_in "$variant" nvim "$path"
+    [[ $# -ge 2 ]] || { usage; exit 2; }
+    exec_env "$2" nvim "${3:-.}"
     ;;
-
   yazi)
-    variant="$(variant_or_default "${2:-}")"
-    path="${3:-.}"
-    exec_in "$variant" yazi "$path"
+    [[ $# -ge 2 ]] || { usage; exit 2; }
+    exec_env "$2" yazi "${3:-.}"
     ;;
-
   exec)
-    variant="$(variant_or_default "${2:-}")"
-    shift 2 || true
+    [[ $# -ge 4 ]] || { usage; exit 2; }
+    name="$2"; shift 2
     [[ "${1:-}" == "--" ]] && shift
-    [[ "$#" -gt 0 ]] || { echo "dev exec requires a command" >&2; exit 2; }
-    exec_in "$variant" "$@"
+    exec_env "$name" "$@"
     ;;
-
+  install)
+    [[ $# -ge 2 ]] || { usage; exit 2; }
+    install_repo "$2" "${3:-$PWD}"
+    ;;
   stop|rm|status)
-    variant="$(variant_or_default "${2:-}")"
-    name="$(container_name "$variant")"
-    case "$cmd" in
-      stop)
-        if container_exists "$name"; then docker stop "$name"; else echo "$name does not exist"; fi
-        ;;
-      rm)
-        if container_exists "$name"; then docker rm -f "$name"; else echo "$name does not exist"; fi
-        ;;
-      status)
-        if container_exists "$name"; then
-          docker ps -a --filter "name=^/${name}$" --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}'
-        else
-          echo "$name does not exist"
-        fi
-        ;;
-    esac
+    [[ $# -eq 2 ]] || { usage; exit 2; }
+    manage_env_container "$cmd" "$2"
     ;;
-
-  -h|--help|help|"") usage ;;
+  help|-h|--help|"") usage ;;
   *) echo "Unknown command: $cmd" >&2; usage; exit 2 ;;
 esac

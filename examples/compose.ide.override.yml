@@ -1,0 +1,18 @@
+# Example only: copy/adapt this inside a multi-service project.
+# The important part is that the IDE service mounts the source at the same path
+# seen by debugpy in the application services and shares their Compose network.
+services:
+  ide:
+    image: dev-env:ide
+    working_dir: /workspace/histoseg-plugin
+    volumes:
+      - .:/workspace/histoseg-plugin
+      # Add the same sibling repos / NAS mounts needed by the application.
+      # - ../pathseg-benchmark:/workspace/pathseg-benchmark
+      # - /mnt/nas6:/mnt/nas6
+    environment:
+      # Parsed by the included Neovim config; produces DAP attach choices on F5.
+      DAP_PYTHON_TARGETS: "API=api:5678,Worker=worker:5679"
+    stdin_open: true
+    tty: true
+    command: sleep infinity

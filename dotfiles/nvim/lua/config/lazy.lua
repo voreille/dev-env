@@ -10,8 +10,35 @@ if not vim.uv.fs_stat(lazypath) then
 end
 vim.opt.rtp:prepend(lazypath)
 
+local function python_adapter()
+  if vim.fn.executable("/opt/dev-tools/bin/python") == 1 then
+    return "/opt/dev-tools/bin/python"
+  end
+  return "python3"
+end
+
+local function add_remote_python_targets(dap)
+  local spec = vim.env.DAP_PYTHON_TARGETS
+  if not spec or spec == "" then
+    return
+  end
+
+  dap.configurations.python = dap.configurations.python or {}
+  for item in string.gmatch(spec, "[^,]+") do
+    local name, host, port = item:match("^%s*([^=]+)=([^:]+):(%d+)%s*$")
+    if name and host and port then
+      table.insert(dap.configurations.python, {
+        type = "python",
+        request = "attach",
+        name = "Attach: " .. name,
+        connect = { host = host, port = tonumber(port) },
+        justMyCode = false,
+      })
+    end
+  end
+end
+
 require("lazy").setup({
-  -- Fast file/content/symbol search.
   {
     "ibhagwan/fzf-lua",
     dependencies = { "nvim-tree/nvim-web-devicons" },
@@ -25,7 +52,6 @@ require("lazy").setup({
     },
   },
 
-  -- File browser that behaves like a normal editable buffer.
   {
     "stevearc/oil.nvim",
     opts = {
@@ -38,12 +64,8 @@ require("lazy").setup({
     },
   },
 
-  {
-    "lewis6991/gitsigns.nvim",
-    opts = {},
-  },
+  { "lewis6991/gitsigns.nvim", opts = {} },
 
-  -- Completion. Stay on the stable v1 line while v2 is under active development.
   {
     "saghen/blink.cmp",
     version = "1.*",
@@ -54,12 +76,12 @@ require("lazy").setup({
     },
   },
 
-  -- LSP configuration collection; Neovim itself provides the LSP client.
   {
     "neovim/nvim-lspconfig",
     config = function()
       local capabilities = require("blink.cmp").get_lsp_capabilities()
 
+      local has_research_venv = vim.fn.isdirectory("/opt/venv") == 1
       vim.lsp.config("pyright", {
         capabilities = capabilities,
         settings = {
@@ -68,15 +90,15 @@ require("lazy").setup({
               autoSearchPaths = true,
               useLibraryCodeForTypes = true,
               typeCheckingMode = "basic",
+              -- A standalone IDE service intentionally does not mirror application
+              -- dependencies, so avoid noisy third-party import diagnostics there.
+              reportMissingImports = has_research_venv and "error" or "none",
             },
           },
         },
       })
 
-      vim.lsp.config("ruff", {
-        capabilities = capabilities,
-      })
-
+      vim.lsp.config("ruff", { capabilities = capabilities })
       vim.lsp.enable("pyright")
       vim.lsp.enable("ruff")
 
@@ -96,7 +118,6 @@ require("lazy").setup({
     end,
   },
 
-  -- VS Code-like breakpoint workflow using debugpy in the same container.
   {
     "mfussenegger/nvim-dap",
     dependencies = {
@@ -110,8 +131,9 @@ require("lazy").setup({
       local dap = require("dap")
       local dapui = require("dapui")
 
-      require("dap-python").setup("python3")
+      require("dap-python").setup(python_adapter())
       require("dap-python").test_runner = "pytest"
+      add_remote_python_targets(dap)
       dapui.setup()
 
       dap.listeners.before.attach.dapui_config = function() dapui.open() end

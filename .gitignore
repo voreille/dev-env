@@ -1,3 +1,6 @@
 *.swp
 *.swo
 .DS_Store
+
+# Temporary output from local experiments; lock files are intentionally tracked.
+environments/*/requirements.generated.txt
