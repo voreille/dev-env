@@ -115,7 +115,7 @@ install_nvim() {
 install_yazi() {
   if version_matches yazi "$YAZI_VERSION"; then echo "Yazi $YAZI_VERSION already installed"; return; fi
   echo "Installing Yazi $YAZI_VERSION"
-  local triple="${YAZI_ARCH}-unknown-linux-gnu"
+  local triple="${YAZI_ARCH}-unknown-linux-musl"
   local dst="$OPT_DIR/yazi-$YAZI_VERSION"
   rm -rf "$dst" "$TMP/yazi"
   mkdir -p "$TMP/yazi" "$dst/bin"
