@@ -1,0 +1,8 @@
+# Yazi already ships with Vim-style h/j/k/l navigation.
+# Add only a few personal conveniences so we keep upstream defaults intact.
+[mgr]
+prepend_keymap = [
+  { on = [ "g", "w" ], run = "cd /workspaces", desc = "Go to ~/workspaces" },
+  { on = [ "g", "n" ], run = "cd /mnt", desc = "Go to /mnt (NAS roots)" },
+  { on = [ "<C-h>" ], run = "hidden toggle", desc = "Toggle hidden files" },
+]

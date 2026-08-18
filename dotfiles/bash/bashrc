@@ -1,0 +1,50 @@
+# ~/.bashrc inside dev-env containers
+
+case $- in
+  *i*) ;;
+  *) return ;;
+esac
+
+export EDITOR=nvim
+export VISUAL=nvim
+export PAGER=less
+export LESS='-R'
+
+alias ll='ls -alF'
+alias la='ls -A'
+alias l='ls -CF'
+alias gs='git status -sb'
+alias gd='git diff'
+alias gl='git log --oneline --decorate --graph -20'
+alias v='nvim'
+alias lg='lazygit'
+alias py='python'
+
+# cd to the directory left by Yazi.
+y() {
+  local tmp cwd
+  tmp="$(mktemp -t yazi-cwd.XXXXXX)"
+  yazi "$@" --cwd-file="$tmp"
+  if cwd="$(cat -- "$tmp")" && [ -n "$cwd" ] && [ "$cwd" != "$PWD" ]; then
+    builtin cd -- "$cwd"
+  fi
+  rm -f -- "$tmp"
+}
+
+# Activate a local virtualenv automatically when explicitly requested.
+venv() {
+  if [ -f .venv/bin/activate ]; then
+    # shellcheck disable=SC1091
+    source .venv/bin/activate
+  else
+    echo "No .venv found in $PWD" >&2
+    return 1
+  fi
+}
+
+# Git branch in prompt, intentionally simple/fast.
+_git_branch() {
+  git symbolic-ref --short HEAD 2>/dev/null
+}
+
+PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]$ '

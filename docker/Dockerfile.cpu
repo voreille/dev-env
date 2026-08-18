@@ -1,0 +1,9 @@
+ARG BASE_IMAGE=dev-env-base:cpu
+FROM ${BASE_IMAGE}
+
+ENV DEV_VARIANT=cpu
+
+LABEL org.opencontainers.image.title="dev-env CPU"
+LABEL org.opencontainers.image.description="Terminal-first CPU development environment"
+
+CMD ["sleep", "infinity"]

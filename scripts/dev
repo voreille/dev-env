@@ -1,0 +1,318 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+DEV_ENV_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+WORKSPACES_ROOT="${DEV_WORKSPACES_ROOT:-$HOME/workspaces}"
+DEFAULT_VARIANT="${DEV_VARIANT:-cuda}"
+NAS_MODE="${DEV_NAS_MODE:-rw}"
+CACHE_ROOT="${DEV_CACHE_ROOT:-$HOME/.cache/dev-env}"
+
+CPU_BASE_TAG="${DEV_CPU_BASE_TAG:-dev-env-base:cpu}"
+CPU_TAG="${DEV_CPU_TAG:-dev-env:cpu}"
+CUDA_BASE_TAG="${DEV_CUDA_BASE_TAG:-dev-env-base:cuda12.3}"
+CUDA_TAG="${DEV_CUDA_TAG:-dev-env:cuda12.3}"
+CUDA_BASE_IMAGE="${DEV_CUDA_BASE_IMAGE:-nvidia/cuda:12.3.2-cudnn9-runtime-ubuntu22.04}"
+CPU_BASE_IMAGE="${DEV_CPU_BASE_IMAGE:-ubuntu:22.04}"
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  dev build [cpu|cuda|all]
+  dev start [cpu|cuda]
+  dev shell [cpu|cuda]
+  dev nvim [cpu|cuda] [path]
+  dev yazi [cpu|cuda] [path]
+  dev exec [cpu|cuda] -- <command...>
+  dev stop [cpu|cuda]
+  dev rm [cpu|cuda]
+  dev status [cpu|cuda]
+
+Environment overrides:
+  DEV_IMAGE=<image>              Use a project-specific image instead of dev-env:*
+  DEV_VARIANT=cpu|cuda           Default variant (default: cuda)
+  DEV_WORKSPACES_ROOT=<path>     Host workspace root (default: ~/workspaces)
+  DEV_NAS_MODE=rw|ro             /mnt/nas* mount mode (default: rw)
+  DEV_GPUS=<docker --gpus value> GPU selection (default: all)
+  DEV_DOCKER_ARGS='...'          Extra docker run args, e.g. '-p 8090:8090'
+  DEV_CONTAINER_NAME=<name>      Override inferred project container name
+
+Examples:
+  dev build all
+  cd ~/workspaces/histoseg-plugin
+  dev shell cuda
+  dev nvim cuda .
+  DEV_IMAGE=histoseg-dev dev shell cuda
+  DEV_DOCKER_ARGS='-p 8090:8090 -p 5679:5679' dev start cuda
+USAGE
+}
+
+variant_or_default() {
+  local value="${1:-$DEFAULT_VARIANT}"
+  case "$value" in
+    cpu|cuda) printf '%s\n' "$value" ;;
+    *) echo "Expected variant 'cpu' or 'cuda', got: $value" >&2; exit 2 ;;
+  esac
+}
+
+project_name() {
+  local name
+  if [[ "$PWD" == "$WORKSPACES_ROOT" || "$PWD" == "$WORKSPACES_ROOT"/* ]]; then
+    name="$(basename "$PWD")"
+  else
+    name="$(basename "$PWD")"
+  fi
+  name="$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9_.-]+/-/g; s/^-+|-+$//g')"
+  printf '%s\n' "${name:-workspace}"
+}
+
+container_name() {
+  local variant="$1"
+  if [[ -n "${DEV_CONTAINER_NAME:-}" ]]; then
+    printf '%s\n' "$DEV_CONTAINER_NAME"
+  else
+    printf 'dev-%s-%s\n' "$(project_name)" "$variant"
+  fi
+}
+
+image_for() {
+  local variant="$1"
+  if [[ -n "${DEV_IMAGE:-}" ]]; then
+    printf '%s\n' "$DEV_IMAGE"
+  elif [[ "$variant" == cuda ]]; then
+    printf '%s\n' "$CUDA_TAG"
+  else
+    printf '%s\n' "$CPU_TAG"
+  fi
+}
+
+workdir_for_container() {
+  if [[ "$PWD" == "$WORKSPACES_ROOT" ]]; then
+    printf '%s\n' "$WORKSPACES_ROOT"
+  elif [[ "$PWD" == "$WORKSPACES_ROOT"/* ]]; then
+    # ~/workspaces is mounted at the same absolute location inside the container.
+    printf '%s\n' "$PWD"
+  else
+    printf '%s\n' "$WORKSPACES_ROOT"
+  fi
+}
+
+build_base() {
+  local variant="$1"
+  local base_image base_tag final_tag final_dockerfile
+  if [[ "$variant" == cpu ]]; then
+    base_image="$CPU_BASE_IMAGE"
+    base_tag="$CPU_BASE_TAG"
+    final_tag="$CPU_TAG"
+    final_dockerfile="$DEV_ENV_ROOT/docker/Dockerfile.cpu"
+  else
+    base_image="$CUDA_BASE_IMAGE"
+    base_tag="$CUDA_BASE_TAG"
+    final_tag="$CUDA_TAG"
+    final_dockerfile="$DEV_ENV_ROOT/docker/Dockerfile.cuda"
+  fi
+
+  echo "Building $base_tag from $base_image"
+  docker build \
+    -f "$DEV_ENV_ROOT/docker/Dockerfile.base" \
+    --build-arg "BASE_IMAGE=$base_image" \
+    --build-arg "USER_UID=$(id -u)" \
+    --build-arg "USER_GID=$(id -g)" \
+    -t "$base_tag" \
+    "$DEV_ENV_ROOT"
+
+  echo "Building $final_tag"
+  docker build \
+    -f "$final_dockerfile" \
+    --build-arg "BASE_IMAGE=$base_tag" \
+    -t "$final_tag" \
+    "$DEV_ENV_ROOT"
+}
+
+ensure_host_dirs() {
+  mkdir -p "$WORKSPACES_ROOT"
+  mkdir -p \
+    "$CACHE_ROOT/nvim/data" \
+    "$CACHE_ROOT/nvim/state" \
+    "$CACHE_ROOT/nvim/cache" \
+    "$CACHE_ROOT/huggingface" \
+    "$CACHE_ROOT/torch" \
+    "$CACHE_ROOT/uv"
+}
+
+container_exists() {
+  docker container inspect "$1" >/dev/null 2>&1
+}
+
+container_running() {
+  [[ "$(docker inspect -f '{{.State.Running}}' "$1" 2>/dev/null || true)" == "true" ]]
+}
+
+start_container() {
+  local variant="$1"
+  local name image workdir
+  name="$(container_name "$variant")"
+  image="$(image_for "$variant")"
+  workdir="$(workdir_for_container)"
+
+  ensure_host_dirs
+
+  if container_running "$name"; then
+    echo "$name is already running"
+    return 0
+  fi
+  if container_exists "$name"; then
+    docker start "$name" >/dev/null
+    echo "Started existing container: $name"
+    return 0
+  fi
+
+  if ! docker image inspect "$image" >/dev/null 2>&1; then
+    echo "Image '$image' does not exist." >&2
+    if [[ -z "${DEV_IMAGE:-}" ]]; then
+      echo "Run: $0 build $variant" >&2
+    fi
+    exit 1
+  fi
+
+  local -a args
+  args=(
+    run -d
+    --name "$name"
+    --init
+    --ipc=host
+    --workdir "$workdir"
+    --env "TERM=${TERM:-xterm-256color}"
+    --env "DEV_WORKSPACES_ROOT=$WORKSPACES_ROOT"
+    --mount "type=bind,src=$WORKSPACES_ROOT,dst=$WORKSPACES_ROOT"
+    --mount "type=bind,src=$CACHE_ROOT/nvim/data,dst=/home/dev/.local/share/nvim"
+    --mount "type=bind,src=$CACHE_ROOT/nvim/state,dst=/home/dev/.local/state/nvim"
+    --mount "type=bind,src=$CACHE_ROOT/nvim/cache,dst=/home/dev/.cache/nvim"
+    --mount "type=bind,src=$CACHE_ROOT/huggingface,dst=/home/dev/.cache/huggingface"
+    --mount "type=bind,src=$CACHE_ROOT/torch,dst=/home/dev/.cache/torch"
+    --mount "type=bind,src=$CACHE_ROOT/uv,dst=/home/dev/.cache/uv"
+  )
+
+  # Convenient canonical alias in addition to preserving host absolute paths.
+  args+=(--mount "type=bind,src=$WORKSPACES_ROOT,dst=/workspaces")
+
+  # Preserve Git identity/config when available without exposing private SSH keys.
+  if [[ -f "$HOME/.gitconfig" ]]; then
+    args+=(--mount "type=bind,src=$HOME/.gitconfig,dst=/home/dev/.gitconfig,readonly")
+  fi
+  if [[ -f "$HOME/.ssh/config" ]]; then
+    args+=(--mount "type=bind,src=$HOME/.ssh/config,dst=/home/dev/.ssh/config,readonly")
+  fi
+  if [[ -f "$HOME/.ssh/known_hosts" ]]; then
+    args+=(--mount "type=bind,src=$HOME/.ssh/known_hosts,dst=/home/dev/.ssh/known_hosts,readonly")
+  fi
+  if [[ -n "${SSH_AUTH_SOCK:-}" && -S "${SSH_AUTH_SOCK}" ]]; then
+    args+=(
+      --mount "type=bind,src=$SSH_AUTH_SOCK,dst=/ssh-agent"
+      --env SSH_AUTH_SOCK=/ssh-agent
+    )
+  fi
+
+  # Mount every currently available /mnt/nas* directory at the identical path.
+  local nas
+  shopt -s nullglob
+  for nas in /mnt/nas*; do
+    [[ -d "$nas" ]] || continue
+    if [[ "$NAS_MODE" == ro ]]; then
+      args+=(--mount "type=bind,src=$nas,dst=$nas,readonly")
+    else
+      args+=(--mount "type=bind,src=$nas,dst=$nas")
+    fi
+  done
+  shopt -u nullglob
+
+  if [[ "$variant" == cuda ]]; then
+    args+=(--gpus "${DEV_GPUS:-all}")
+  fi
+
+  if [[ -n "${DEV_DOCKER_ARGS:-}" ]]; then
+    # Intentional shell-style splitting for user-provided docker CLI flags.
+    # shellcheck disable=SC2206
+    local extra=( ${DEV_DOCKER_ARGS} )
+    args+=("${extra[@]}")
+  fi
+
+  args+=("$image")
+
+  docker "${args[@]}" >/dev/null
+  echo "Started $name ($image)"
+  echo "workdir: $workdir"
+}
+
+exec_in() {
+  local variant="$1"; shift
+  local name
+  name="$(container_name "$variant")"
+  start_container "$variant" >/dev/null
+  docker exec -it --workdir "$(workdir_for_container)" "$name" "$@"
+}
+
+cmd="${1:-}"
+case "$cmd" in
+  build)
+    target="${2:-all}"
+    case "$target" in
+      cpu) build_base cpu ;;
+      cuda) build_base cuda ;;
+      all) build_base cpu; build_base cuda ;;
+      *) usage; exit 2 ;;
+    esac
+    ;;
+
+  start)
+    variant="$(variant_or_default "${2:-}")"
+    start_container "$variant"
+    ;;
+
+  shell)
+    variant="$(variant_or_default "${2:-}")"
+    exec_in "$variant" bash
+    ;;
+
+  nvim)
+    variant="$(variant_or_default "${2:-}")"
+    path="${3:-.}"
+    exec_in "$variant" nvim "$path"
+    ;;
+
+  yazi)
+    variant="$(variant_or_default "${2:-}")"
+    path="${3:-.}"
+    exec_in "$variant" yazi "$path"
+    ;;
+
+  exec)
+    variant="$(variant_or_default "${2:-}")"
+    shift 2 || true
+    [[ "${1:-}" == "--" ]] && shift
+    [[ "$#" -gt 0 ]] || { echo "dev exec requires a command" >&2; exit 2; }
+    exec_in "$variant" "$@"
+    ;;
+
+  stop|rm|status)
+    variant="$(variant_or_default "${2:-}")"
+    name="$(container_name "$variant")"
+    case "$cmd" in
+      stop)
+        if container_exists "$name"; then docker stop "$name"; else echo "$name does not exist"; fi
+        ;;
+      rm)
+        if container_exists "$name"; then docker rm -f "$name"; else echo "$name does not exist"; fi
+        ;;
+      status)
+        if container_exists "$name"; then
+          docker ps -a --filter "name=^/${name}$" --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}'
+        else
+          echo "$name does not exist"
+        fi
+        ;;
+    esac
+    ;;
+
+  -h|--help|help|"") usage ;;
+  *) echo "Unknown command: $cmd" >&2; usage; exit 2 ;;
+esac
