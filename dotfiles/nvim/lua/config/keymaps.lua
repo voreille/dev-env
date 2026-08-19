@@ -27,3 +27,6 @@ map("n", "]d", function() vim.diagnostic.jump({ count = 1, float = true }) end, 
 map("n", "<leader>dp", function() vim.diagnostic.jump({ count = -1, float = true }) end, { desc = "Diagnostic: previous" })
 map("n", "<leader>dn", function() vim.diagnostic.jump({ count = 1, float = true }) end, { desc = "Diagnostic: next" })
 map("n", "<leader>de", vim.diagnostic.open_float, { desc = "Diagnostic: details" })
+
+-- buffer movement
+map("n", "<leader><leader>", "<C-^>", { desc = "Previous buffer" })
