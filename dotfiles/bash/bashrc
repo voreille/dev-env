@@ -17,6 +17,7 @@ alias gs='git status -sb'
 alias gd='git diff'
 alias gl='git log --oneline --decorate --graph -20'
 alias v='nvim'
+alias vim='nvim'
 alias lg='lazygit'
 
 # Yazi wrapper: when Yazi exits, follow its final directory in the current shell.
@@ -29,3 +30,7 @@ y() {
   fi
   rm -f -- "$tmp"
 }
+
+if [ -f "$HOME/dev-env/dotfiles/bash/functions.sh" ]; then
+    source "$HOME/dev-env/dotfiles/bash/functions.sh"
+fi
