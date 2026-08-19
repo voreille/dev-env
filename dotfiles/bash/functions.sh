@@ -84,7 +84,7 @@ conda-on() {
 }
 
 tconda() {
-    if [ -z "$TMUX" ]; then
+    if [ -z "${TMUX:-}" ]; then
         echo "tconda must be run inside tmux"
         return 1
     fi
@@ -93,17 +93,16 @@ tconda() {
 
     root="$(_conda_root)" || return 1
 
-    # Enable Conda in the current shell so we can enumerate environments.
-    source "$root/bin/activate"
-
+    # Query Conda without activating it in the current shell.
     env="$(
-        conda env list |
-            awk 'NF && $1 !~ /^#/ { print $1 }' |
-            fzf --prompt="Conda env > "
+        "$root/bin/conda" env list |
+        awk 'NF && $1 !~ /^#/ { print $1 }' |
+        fzf --prompt="Conda env > "
     )"
 
     [ -n "$env" ] || return
 
+    # Create a new tmux window in the current directory.
     pane="$(
         tmux new-window \
             -n "$env" \
@@ -111,8 +110,9 @@ tconda() {
             -P -F '#{pane_id}'
     )"
 
+    # Activate Conda only in the new window.
     tmux send-keys \
         -t "$pane" \
-        "source \"$root/bin/activate\" && conda activate \"$env\"" \
+        "source \"$root/bin/activate\" \"$env\"" \
         C-m
 }

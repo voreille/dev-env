@@ -186,7 +186,32 @@ require("lazy").setup({
 		end,
 	},
 
-	{ "lewis6991/gitsigns.nvim", opts = {} },
+	{
+		"lewis6991/gitsigns.nvim",
+		config = function()
+			local gs = require("gitsigns")
+
+			gs.setup()
+
+			vim.keymap.set("n", "]h", function()
+				gs.nav_hunk("next")
+			end, { desc = "Next git hunk" })
+
+			vim.keymap.set("n", "[h", function()
+				gs.nav_hunk("prev")
+			end, { desc = "Previous git hunk" })
+
+			vim.keymap.set("n", "<leader>gp", gs.preview_hunk, { desc = "Preview git hunk" })
+
+			vim.keymap.set("n", "<leader>gs", gs.stage_hunk, { desc = "Stage git hunk" })
+
+			vim.keymap.set("n", "<leader>gr", gs.reset_hunk, { desc = "Reset git hunk" })
+
+			vim.keymap.set("n", "<leader>gb", gs.blame_line, { desc = "Git blame line" })
+
+			vim.keymap.set("n", "<leader>gd", gs.diffthis, { desc = "Git diff file" })
+		end,
+	},
 
 	{
 		"saghen/blink.cmp",
@@ -271,9 +296,6 @@ require("lazy").setup({
 						vim.lsp.buf.code_action,
 						vim.tbl_extend("force", opts, { desc = "Code action" })
 					)
-					vim.keymap.set("n", "<leader>lf", function()
-						vim.lsp.buf.format({ async = true })
-					end, vim.tbl_extend("force", opts, { desc = "Format" }))
 				end,
 			})
 		end,
