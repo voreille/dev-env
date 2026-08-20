@@ -179,10 +179,13 @@ require("lazy").setup({
 
 	{
 		"Mofiqul/dracula.nvim",
-		lazy = false,
 		priority = 1000,
 		config = function()
 			vim.cmd.colorscheme("dracula")
+
+			vim.api.nvim_set_hl(0, "Function", {
+				fg = "#50fa7b",
+			})
 		end,
 	},
 
@@ -332,11 +335,11 @@ require("lazy").setup({
 				dapui.close()
 			end
 
-			vim.keymap.set("n", "<F5>", dap.continue, { desc = "Debug: continue/start" })
-			vim.keymap.set("n", "<F9>", dap.toggle_breakpoint, { desc = "Debug: breakpoint" })
-			vim.keymap.set("n", "<F10>", dap.step_over, { desc = "Debug: step over" })
-			vim.keymap.set("n", "<F11>", dap.step_into, { desc = "Debug: step into" })
-			vim.keymap.set("n", "<F12>", dap.step_out, { desc = "Debug: step out" })
+			vim.keymap.set("n", "<leader>dc", dap.continue, { desc = "Debug: continue/start" })
+			vim.keymap.set("n", "<leader>db", dap.toggle_breakpoint, { desc = "Debug: breakpoint" })
+			vim.keymap.set("n", "<leader>do", dap.step_over, { desc = "Debug: step over" })
+			vim.keymap.set("n", "<leader>di", dap.step_into, { desc = "Debug: step into" })
+			vim.keymap.set("n", "<leader>du", dap.step_out, { desc = "Debug: step out" })
 			vim.keymap.set("n", "<leader>du", dapui.toggle, { desc = "Debug UI" })
 			vim.keymap.set("n", "<leader>dr", dap.repl.open, { desc = "Debug REPL" })
 			vim.keymap.set("n", "<leader>dt", function()
@@ -385,7 +388,7 @@ require("lazy").setup({
 			formatters_by_ft = {
 				python = { "ruff_organize_imports", "ruff_format" },
 				lua = { "stylua" },
-				yaml = { "prettier" },
+				yaml = { "yamlfmt" },
 				java = { "google-java-format" },
 				sh = { "shfmt" },
 				bash = { "shfmt" },
@@ -406,6 +409,20 @@ require("lazy").setup({
 		},
 	},
 	{
+		"hat0uma/csvview.nvim",
+		opts = {
+			parser = {
+				comments = { "#", "//" },
+			},
+			keymaps = {
+				textobject_field_inner = { "if", mode = { "o", "x" } },
+				textobject_field_outer = { "af", mode = { "o", "x" } },
+				jump_next_field_end = { "<Tab>", mode = { "n", "v" } },
+				jump_prev_field_end = { "<S-Tab>", mode = { "n", "v" } },
+			},
+		},
+	},
+	{
 		"mason-org/mason.nvim",
 		opts = {},
 	},
@@ -418,7 +435,7 @@ require("lazy").setup({
 		opts = {
 			ensure_installed = {
 				"stylua",
-				"prettier",
+				"yamlfmt",
 				"google-java-format",
 				"shfmt",
 			},
