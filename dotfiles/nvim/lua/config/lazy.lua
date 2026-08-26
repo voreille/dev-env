@@ -14,23 +14,27 @@ if not vim.uv.fs_stat(lazypath) then
 end
 vim.opt.rtp:prepend(lazypath)
 
+local dev_prefix = vim.env.DEV_ENV_PREFIX or vim.fn.expand("~/.local")
+local python_tools = dev_prefix .. "/share/dev-env/python-tools/bin/python"
+
+local function executable(path)
+	return path and path ~= "" and vim.fn.executable(path) == 1
+end
+
 local function project_python()
 	local candidates = {}
-
 	if vim.env.VIRTUAL_ENV and vim.env.VIRTUAL_ENV ~= "" then
 		table.insert(candidates, vim.env.VIRTUAL_ENV .. "/bin/python")
 	end
 	if vim.env.CONDA_PREFIX and vim.env.CONDA_PREFIX ~= "" then
 		table.insert(candidates, vim.env.CONDA_PREFIX .. "/bin/python")
 	end
-
-	local local_venv = vim.fn.getcwd() .. "/.venv/bin/python"
-	table.insert(candidates, local_venv)
-	table.insert(candidates, vim.fn.expand("~/.local/share/dev-env/python-tools/bin/python"))
+	table.insert(candidates, vim.fn.getcwd() .. "/.venv/bin/python")
+	table.insert(candidates, python_tools)
 	table.insert(candidates, vim.fn.exepath("python3"))
 
 	for _, python in ipairs(candidates) do
-		if python and python ~= "" and vim.fn.executable(python) == 1 then
+		if executable(python) then
 			return python
 		end
 	end
@@ -38,20 +42,14 @@ local function project_python()
 end
 
 local function debug_python()
-	local candidates = {
-		project_python(),
-		vim.fn.expand("~/.local/share/dev-env/python-tools/bin/python"),
-	}
-
-	for _, python in ipairs(candidates) do
-		if python and vim.fn.executable(python) == 1 then
+	for _, python in ipairs({ project_python(), python_tools }) do
+		if executable(python) then
 			vim.fn.system({ python, "-c", "import debugpy" })
 			if vim.v.shell_error == 0 then
 				return python
 			end
 		end
 	end
-
 	return project_python()
 end
 
@@ -62,7 +60,7 @@ local function add_remote_python_targets(dap)
 	end
 
 	dap.configurations.python = dap.configurations.python or {}
-	for item in string.gmatch(spec, "[^,]+") do
+	for item in spec:gmatch("[^,]+") do
 		local name, host, port = item:match("^%s*([^=]+)=([^:]+):(%d+)%s*$")
 		if name and host and port then
 			table.insert(dap.configurations.python, {
@@ -96,62 +94,14 @@ require("lazy").setup({
 		dependencies = { "nvim-tree/nvim-web-devicons" },
 		opts = {},
 		keys = {
-			{
-				"<C-p>",
-				function()
-					require("fzf-lua").files()
-				end,
-				desc = "Find files",
-			},
-			{
-				"<leader>ff",
-				function()
-					require("fzf-lua").files()
-				end,
-				desc = "Find files",
-			},
-			{
-				"<leader>fg",
-				function()
-					require("fzf-lua").live_grep()
-				end,
-				desc = "Live grep",
-			},
-			{
-				"<leader>fb",
-				function()
-					require("fzf-lua").buffers()
-				end,
-				desc = "Buffers",
-			},
-			{
-				"<leader>fr",
-				function()
-					require("fzf-lua").oldfiles()
-				end,
-				desc = "Recent files",
-			},
-			{
-				"<leader>p",
-				function()
-					require("fzf-lua").lsp_document_symbols()
-				end,
-				desc = "Document symbols",
-			},
-			{
-				"<leader>fs",
-				function()
-					require("fzf-lua").lsp_document_symbols()
-				end,
-				desc = "Document symbols",
-			},
-			{
-				"<leader>fS",
-				function()
-					require("fzf-lua").lsp_workspace_symbols()
-				end,
-				desc = "Workspace symbols",
-			},
+			{ "<C-p>", function() require("fzf-lua").files() end, desc = "Find files" },
+			{ "<leader>ff", function() require("fzf-lua").files() end, desc = "Find files" },
+			{ "<leader>fg", function() require("fzf-lua").live_grep() end, desc = "Live grep" },
+			{ "<leader>fb", function() require("fzf-lua").buffers() end, desc = "Buffers" },
+			{ "<leader>fr", function() require("fzf-lua").oldfiles() end, desc = "Recent files" },
+			{ "<leader>p", function() require("fzf-lua").lsp_document_symbols() end, desc = "Document symbols" },
+			{ "<leader>fs", function() require("fzf-lua").lsp_document_symbols() end, desc = "Document symbols" },
+			{ "<leader>fS", function() require("fzf-lua").lsp_workspace_symbols() end, desc = "Workspace symbols" },
 			{
 				"<leader>cn",
 				function()
@@ -183,37 +133,47 @@ require("lazy").setup({
 		config = function()
 			vim.cmd.colorscheme("dracula")
 
-			vim.api.nvim_set_hl(0, "Function", {
-				fg = "#50fa7b",
-			})
+			local highlights = {
+				Function = { fg = "#50fa7b" },
+				["@function"] = { fg = "#50fa7b" },
+				["@function.call"] = { fg = "#50fa7b" },
+				["@function.method"] = { fg = "#50fa7b" },
+				["@function.method.call"] = { fg = "#50fa7b" },
+				["@lsp.type.function.python"] = { fg = "#50fa7b" },
+				["@lsp.type.method.python"] = { fg = "#50fa7b" },
+
+				["@variable.parameter"] = { fg = "#ffb86c", italic = true },
+				["@lsp.type.parameter.python"] = { fg = "#ffb86c", italic = true },
+
+				["@type"] = { fg = "#8be9fd" },
+				["@type.builtin"] = { fg = "#8be9fd" },
+				["@type.definition"] = { fg = "#8be9fd" },
+				["@constructor"] = { fg = "#8be9fd" },
+				["@lsp.type.class.python"] = { fg = "#8be9fd" },
+
+				["@variable.builtin"] = { fg = "#bd93f9", italic = true },
+				["@variable.member"] = { fg = "#8be9fd" },
+				["@property"] = { fg = "#8be9fd" },
+			}
+
+			for group, opts in pairs(highlights) do
+				vim.api.nvim_set_hl(0, group, opts)
+			end
 		end,
 	},
 
 	{
 		"lewis6991/gitsigns.nvim",
-		config = function()
-			local gs = require("gitsigns")
-
-			gs.setup()
-
-			vim.keymap.set("n", "]h", function()
-				gs.nav_hunk("next")
-			end, { desc = "Next git hunk" })
-
-			vim.keymap.set("n", "[h", function()
-				gs.nav_hunk("prev")
-			end, { desc = "Previous git hunk" })
-
-			vim.keymap.set("n", "<leader>gp", gs.preview_hunk, { desc = "Preview git hunk" })
-
-			vim.keymap.set("n", "<leader>gs", gs.stage_hunk, { desc = "Stage git hunk" })
-
-			vim.keymap.set("n", "<leader>gr", gs.reset_hunk, { desc = "Reset git hunk" })
-
-			vim.keymap.set("n", "<leader>gb", gs.blame_line, { desc = "Git blame line" })
-
-			vim.keymap.set("n", "<leader>gd", gs.diffthis, { desc = "Git diff file" })
-		end,
+		opts = {},
+		keys = {
+			{ "]h", function() require("gitsigns").nav_hunk("next") end, desc = "Next git hunk" },
+			{ "[h", function() require("gitsigns").nav_hunk("prev") end, desc = "Previous git hunk" },
+			{ "<leader>gp", function() require("gitsigns").preview_hunk() end, desc = "Preview git hunk" },
+			{ "<leader>gs", function() require("gitsigns").stage_hunk() end, desc = "Stage git hunk" },
+			{ "<leader>gr", function() require("gitsigns").reset_hunk() end, desc = "Reset git hunk" },
+			{ "<leader>gb", function() require("gitsigns").blame_line() end, desc = "Git blame line" },
+			{ "<leader>gd", function() require("gitsigns").diffthis() end, desc = "Git diff file" },
+		},
 	},
 
 	{
@@ -228,15 +188,18 @@ require("lazy").setup({
 
 	{
 		"neovim/nvim-lspconfig",
+		dependencies = { "saghen/blink.cmp" },
 		config = function()
 			local capabilities = require("blink.cmp").get_lsp_capabilities()
-			local python = project_python()
 
 			vim.lsp.config("pyright", {
 				capabilities = capabilities,
+				before_init = function(_, config)
+					config.settings.python.pythonPath = project_python()
+				end,
 				settings = {
 					python = {
-						pythonPath = python,
+						pythonPath = project_python(),
 						analysis = {
 							autoSearchPaths = true,
 							useLibraryCodeForTypes = true,
@@ -245,60 +208,21 @@ require("lazy").setup({
 					},
 				},
 			})
-
 			vim.lsp.config("ruff", { capabilities = capabilities })
-			vim.lsp.enable("pyright")
-			vim.lsp.enable("ruff")
-
-			local format_group = vim.api.nvim_create_augroup("RuffFormatOnSave", { clear = true })
-			vim.api.nvim_create_autocmd("BufWritePre", {
-				group = format_group,
-				pattern = "*.py",
-				callback = function(args)
-					vim.lsp.buf.format({
-						bufnr = args.buf,
-						async = false,
-						filter = function(client)
-							return client.name == "ruff"
-						end,
-					})
-				end,
-			})
+			vim.lsp.enable({ "pyright", "ruff" })
 
 			vim.api.nvim_create_autocmd("LspAttach", {
+				group = vim.api.nvim_create_augroup("DevEnvLspMaps", { clear = true }),
 				callback = function(args)
-					local opts = { buffer = args.buf }
-					vim.keymap.set(
-						"n",
-						"gd",
-						vim.lsp.buf.definition,
-						vim.tbl_extend("force", opts, { desc = "Go to definition" })
-					)
-					vim.keymap.set(
-						"n",
-						"gD",
-						vim.lsp.buf.declaration,
-						vim.tbl_extend("force", opts, { desc = "Go to declaration" })
-					)
-					vim.keymap.set(
-						"n",
-						"gr",
-						vim.lsp.buf.references,
-						vim.tbl_extend("force", opts, { desc = "References" })
-					)
-					vim.keymap.set("n", "K", vim.lsp.buf.hover, vim.tbl_extend("force", opts, { desc = "Hover" }))
-					vim.keymap.set(
-						"n",
-						"<leader>rn",
-						vim.lsp.buf.rename,
-						vim.tbl_extend("force", opts, { desc = "Rename" })
-					)
-					vim.keymap.set(
-						"n",
-						"<leader>ca",
-						vim.lsp.buf.code_action,
-						vim.tbl_extend("force", opts, { desc = "Code action" })
-					)
+					local function lsp_map(lhs, rhs, desc)
+						vim.keymap.set("n", lhs, rhs, { buffer = args.buf, desc = desc })
+					end
+					lsp_map("gd", vim.lsp.buf.definition, "Go to definition")
+					lsp_map("gD", vim.lsp.buf.declaration, "Go to declaration")
+					lsp_map("gr", vim.lsp.buf.references, "References")
+					lsp_map("K", vim.lsp.buf.hover, "Hover")
+					lsp_map("<leader>rn", vim.lsp.buf.rename, "Rename")
+					lsp_map("<leader>ca", vim.lsp.buf.code_action, "Code action")
 				end,
 			})
 		end,
@@ -339,7 +263,7 @@ require("lazy").setup({
 			vim.keymap.set("n", "<leader>db", dap.toggle_breakpoint, { desc = "Debug: breakpoint" })
 			vim.keymap.set("n", "<leader>do", dap.step_over, { desc = "Debug: step over" })
 			vim.keymap.set("n", "<leader>di", dap.step_into, { desc = "Debug: step into" })
-			vim.keymap.set("n", "<leader>du", dap.step_out, { desc = "Debug: step out" })
+			vim.keymap.set("n", "<leader>dO", dap.step_out, { desc = "Debug: step out" })
 			vim.keymap.set("n", "<leader>du", dapui.toggle, { desc = "Debug UI" })
 			vim.keymap.set("n", "<leader>dr", dap.repl.open, { desc = "Debug REPL" })
 			vim.keymap.set("n", "<leader>dt", function()
@@ -347,6 +271,7 @@ require("lazy").setup({
 			end, { desc = "Debug test method" })
 		end,
 	},
+
 	{
 		"nvim-neo-tree/neo-tree.nvim",
 		branch = "v3.x",
@@ -355,35 +280,27 @@ require("lazy").setup({
 			"MunifTanjim/nui.nvim",
 			"nvim-tree/nvim-web-devicons",
 		},
-		config = function()
-			require("neo-tree").setup({
-				filesystem = {
-					follow_current_file = {
-						enabled = true,
-					},
-					use_libuv_file_watcher = true,
+		opts = {
+			filesystem = {
+				follow_current_file = { enabled = true },
+				use_libuv_file_watcher = true,
+			},
+			window = {
+				position = "left",
+				width = 34,
+				mappings = {
+					["l"] = "open",
+					["h"] = "close_node",
 				},
-				window = {
-					position = "left",
-					width = 34,
-					mappings = {
-						["l"] = "open",
-						["h"] = "close_node",
-					},
-				},
-			})
-		end,
-		keys = {
-			{
-				"<leader>e",
-				"<cmd>Neotree toggle filesystem reveal left<cr>",
-				desc = "Explorer",
 			},
 		},
+		keys = {
+			{ "<leader>e", "<cmd>Neotree toggle filesystem reveal left<CR>", desc = "Explorer" },
+		},
 	},
+
 	{
 		"stevearc/conform.nvim",
-
 		opts = {
 			formatters_by_ft = {
 				python = { "ruff_organize_imports", "ruff_format" },
@@ -393,27 +310,28 @@ require("lazy").setup({
 				sh = { "shfmt" },
 				bash = { "shfmt" },
 			},
+			format_on_save = function(bufnr)
+				if vim.bo[bufnr].filetype == "python" then
+					return { timeout_ms = 3000, lsp_format = "fallback" }
+				end
+			end,
 		},
-
 		keys = {
 			{
 				"<leader>lf",
 				function()
-					require("conform").format({
-						async = true,
-						lsp_format = "fallback",
-					})
+					require("conform").format({ async = true, lsp_format = "fallback" })
 				end,
 				desc = "Format file",
 			},
 		},
 	},
+
 	{
 		"hat0uma/csvview.nvim",
+		cmd = { "CsvViewEnable", "CsvViewDisable", "CsvViewToggle" },
 		opts = {
-			parser = {
-				comments = { "#", "//" },
-			},
+			parser = { comments = { "#", "//" } },
 			keymaps = {
 				textobject_field_inner = { "if", mode = { "o", "x" } },
 				textobject_field_outer = { "af", mode = { "o", "x" } },
@@ -422,16 +340,18 @@ require("lazy").setup({
 			},
 		},
 	},
+
 	{
 		"mason-org/mason.nvim",
-		opts = {},
+		opts = {
+			-- Prefer bootstrap-managed binaries over Mason shims.
+			PATH = "append",
+		},
 	},
 
 	{
 		"WhoIsSethDaniel/mason-tool-installer.nvim",
-		dependencies = {
-			"mason-org/mason.nvim",
-		},
+		dependencies = { "mason-org/mason.nvim" },
 		opts = {
 			ensure_installed = {
 				"stylua",
@@ -441,6 +361,46 @@ require("lazy").setup({
 			},
 		},
 	},
+
+	{
+		"nvim-treesitter/nvim-treesitter",
+		branch = "main",
+		lazy = false,
+		build = ":TSUpdate lua python bash yaml json markdown markdown_inline",
+		init = function()
+			-- tree-sitter-lua uses main; apply this before Lazy's build command.
+			vim.api.nvim_create_autocmd("User", {
+				pattern = "TSUpdate",
+				callback = function()
+					require("nvim-treesitter.parsers").lua.install_info.revision = "main"
+				end,
+			})
+		end,
+		config = function()
+			local treesitter = require("nvim-treesitter")
+			require("nvim-treesitter.parsers").lua.install_info.revision = "main"
+
+			treesitter.install({
+				"lua",
+				"python",
+				"bash",
+				"yaml",
+				"json",
+				"markdown",
+				"markdown_inline",
+			})
+
+			vim.api.nvim_create_autocmd("FileType", {
+				group = vim.api.nvim_create_augroup("DevEnvTreesitter", { clear = true }),
+				pattern = { "python", "lua", "bash", "sh", "yaml", "json", "markdown" },
+				callback = function(args)
+					-- A parser can still be downloading on first launch; do not abort BufRead.
+					pcall(vim.treesitter.start, args.buf)
+				end,
+			})
+		end,
+	},
+
 	{
 		"MeanderingProgrammer/render-markdown.nvim",
 		ft = { "markdown" },
@@ -454,3 +414,4 @@ require("lazy").setup({
 	checker = { enabled = false },
 	change_detection = { notify = false },
 })
+

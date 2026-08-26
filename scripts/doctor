@@ -3,52 +3,125 @@ set -u
 
 SOURCE="$(readlink -f "${BASH_SOURCE[0]}")"
 ROOT="$(cd "$(dirname "$SOURCE")/.." && pwd)"
+# shellcheck disable=SC1091
+source "$ROOT/config/versions.conf"
+
+TREE_SITTER_VERSION="${TREE_SITTER_VERSION:-0.26.12}"
 PREFIX="${DEV_ENV_PREFIX:-$HOME/.local}"
 BIN_DIR="$PREFIX/bin"
+CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 
-printf 'dev-env: %s\n\n' "$ROOT"
+printf 'dev-env: %s\n' "$ROOT"
+printf 'prefix:  %s\n\n' "$PREFIX"
 
 ok=1
-check() {
-  local name="$1" cmd="$2"
-  if command -v "$cmd" >/dev/null 2>&1; then
-    printf '[ok]   %-12s %s\n' "$name" "$(command -v "$cmd")"
-  elif [[ -x "$BIN_DIR/$cmd" ]]; then
-    printf '[ok]   %-12s %s (not currently on PATH)\n' "$name" "$BIN_DIR/$cmd"
-  else
-    printf '[miss] %-12s\n' "$name"
-    ok=0
-  fi
+
+resolve_command() {
+	local cmd="$1"
+	if [[ -x "$BIN_DIR/$cmd" ]]; then
+		printf '%s\n' "$BIN_DIR/$cmd"
+	elif command -v "$cmd" >/dev/null 2>&1; then
+		command -v "$cmd"
+	else
+		return 1
+	fi
 }
 
-check Neovim nvim
-check Yazi yazi
-check lazygit lazygit
-check ripgrep rg
-check fd fd
-check fzf fzf
-check uv uv
-check Pyright pyright-langserver
-check Ruff ruff
-check debugpy debugpy
+check_versioned() {
+	local name="$1" cmd="$2" expected="$3" path output summary
+	if ! path="$(resolve_command "$cmd")"; then
+		printf '[miss] %-16s expected %s\n' "$name" "$expected"
+		ok=0
+		return
+	fi
+
+	if ! output="$("$path" --version 2>&1)"; then
+		printf '[bad]  %-16s %s\n' "$name" "$path"
+		printf '       %s\n' "$(printf '%s' "$output" | head -n1)"
+		ok=0
+		return
+	fi
+
+	if [[ "$output" == *"$expected"* ]]; then
+		printf '[ok]   %-16s %-24s %s\n' "$name" "$expected" "$path"
+	else
+		summary="$(printf '%s\n' "$output" | sed '/^[[:space:]]*$/d' | paste -sd ' ' -)"
+		printf '[bad]  %-16s expected %-12s got: %s\n' "$name" "$expected" "$summary"
+		printf '       path: %s\n' "$path"
+		ok=0
+	fi
+}
+
+check_present() {
+	local name="$1" cmd="$2" path
+	if path="$(resolve_command "$cmd")"; then
+		printf '[ok]   %-16s %s\n' "$name" "$path"
+	else
+		printf '[miss] %-16s\n' "$name"
+		ok=0
+	fi
+}
+
+check_link() {
+	local name="$1" target="$2" expected="$3"
+	if [[ -e "$expected" && -L "$target" && "$(readlink -f "$target")" == "$(readlink -f "$expected")" ]]; then
+		printf '[ok]   %-16s %s -> %s\n' "$name" "$target" "$expected"
+	elif [[ -e "$target" || -L "$target" ]]; then
+		printf '[bad]  %-16s %s does not point to %s\n' "$name" "$target" "$expected"
+		ok=0
+	else
+		printf '[miss] %-16s %s\n' "$name" "$target"
+		ok=0
+	fi
+}
+
+printf 'Pinned tools:\n'
+check_versioned Neovim nvim "$NVIM_VERSION"
+check_versioned Yazi yazi "$YAZI_VERSION"
+check_versioned lazygit lazygit "$LAZYGIT_VERSION"
+check_versioned ripgrep rg "$RIPGREP_VERSION"
+check_versioned fd fd "$FD_VERSION"
+check_versioned fzf fzf "$FZF_VERSION"
+check_versioned uv uv "$UV_VERSION"
+check_versioned tree-sitter tree-sitter "$TREE_SITTER_VERSION"
+
+printf '\nEditor Python tools:\n'
+check_present Pyright pyright-langserver
+check_present Ruff ruff
+check_present debugpy debugpy
 
 printf '\nHost/infrastructure tools:\n'
-for cmd in git ssh python3 conda tmux docker; do
-  if command -v "$cmd" >/dev/null 2>&1; then
-    printf '[ok]   %-12s %s\n' "$cmd" "$(command -v "$cmd")"
-  else
-    printf '[info] %-12s not found\n' "$cmd"
-  fi
+for cmd in curl tar git ssh python3 cc c++ conda tmux docker; do
+	if command -v "$cmd" >/dev/null 2>&1; then
+		printf '[ok]   %-16s %s\n' "$cmd" "$(command -v "$cmd")"
+	else
+		printf '[info] %-16s not found\n' "$cmd"
+	fi
 done
 
-printf '\nConfig:\n'
-for target in "$HOME/.config/nvim" "$HOME/.config/yazi" "$HOME/.config/dev-env/bashrc"; do
-  if [[ -e "$target" || -L "$target" ]]; then printf '[ok]   %s\n' "$target"; else printf '[miss] %s\n' "$target"; ok=0; fi
+if command -v getconf >/dev/null 2>&1; then
+	printf '[info] %-16s %s\n' glibc "$(getconf GNU_LIBC_VERSION 2>/dev/null || printf 'unknown')"
+fi
+
+printf '\nConfig links:\n'
+check_link Neovim "$CONFIG_HOME/nvim" "$ROOT/dotfiles/nvim"
+check_link Yazi "$CONFIG_HOME/yazi" "$ROOT/dotfiles/yazi"
+check_link shell "$CONFIG_HOME/dev-env/bashrc" "$ROOT/dotfiles/bash/bashrc"
+check_link tmux "$CONFIG_HOME/dev-env/tmux.conf" "$ROOT/dotfiles/tmux/tmux.conf"
+
+printf '\nPATH precedence:\n'
+for cmd in nvim tree-sitter pyright-langserver ruff; do
+	if command -v "$cmd" >/dev/null 2>&1; then
+		printf '[info] %-16s %s\n' "$cmd" "$(command -v "$cmd")"
+	else
+		printf '[info] %-16s not currently on PATH\n' "$cmd"
+	fi
 done
 
 if [[ "$ok" == 1 ]]; then
-  printf '\nEverything required by the host IDE setup looks available.\n'
+	printf '\nEverything required by the host IDE setup looks available.\n'
 else
-  printf '\nSome host IDE components are missing. Re-run: %s/bootstrap.sh\n' "$ROOT"
-  exit 1
+	printf '\nSome host IDE components are missing or have the wrong version.\n'
+	printf 'Re-run: %s/install/bootstrap.sh\n' "$ROOT"
+	exit 1
 fi
