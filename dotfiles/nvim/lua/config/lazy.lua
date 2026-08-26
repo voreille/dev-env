@@ -94,14 +94,62 @@ require("lazy").setup({
 		dependencies = { "nvim-tree/nvim-web-devicons" },
 		opts = {},
 		keys = {
-			{ "<C-p>", function() require("fzf-lua").files() end, desc = "Find files" },
-			{ "<leader>ff", function() require("fzf-lua").files() end, desc = "Find files" },
-			{ "<leader>fg", function() require("fzf-lua").live_grep() end, desc = "Live grep" },
-			{ "<leader>fb", function() require("fzf-lua").buffers() end, desc = "Buffers" },
-			{ "<leader>fr", function() require("fzf-lua").oldfiles() end, desc = "Recent files" },
-			{ "<leader>p", function() require("fzf-lua").lsp_document_symbols() end, desc = "Document symbols" },
-			{ "<leader>fs", function() require("fzf-lua").lsp_document_symbols() end, desc = "Document symbols" },
-			{ "<leader>fS", function() require("fzf-lua").lsp_workspace_symbols() end, desc = "Workspace symbols" },
+			{
+				"<C-p>",
+				function()
+					require("fzf-lua").files()
+				end,
+				desc = "Find files",
+			},
+			{
+				"<leader>ff",
+				function()
+					require("fzf-lua").files()
+				end,
+				desc = "Find files",
+			},
+			{
+				"<leader>fg",
+				function()
+					require("fzf-lua").live_grep()
+				end,
+				desc = "Live grep",
+			},
+			{
+				"<leader>fb",
+				function()
+					require("fzf-lua").buffers()
+				end,
+				desc = "Buffers",
+			},
+			{
+				"<leader>fr",
+				function()
+					require("fzf-lua").oldfiles()
+				end,
+				desc = "Recent files",
+			},
+			{
+				"<leader>p",
+				function()
+					require("fzf-lua").lsp_document_symbols()
+				end,
+				desc = "Document symbols",
+			},
+			{
+				"<leader>fs",
+				function()
+					require("fzf-lua").lsp_document_symbols()
+				end,
+				desc = "Document symbols",
+			},
+			{
+				"<leader>fS",
+				function()
+					require("fzf-lua").lsp_workspace_symbols()
+				end,
+				desc = "Workspace symbols",
+			},
 			{
 				"<leader>cn",
 				function()
@@ -166,13 +214,55 @@ require("lazy").setup({
 		"lewis6991/gitsigns.nvim",
 		opts = {},
 		keys = {
-			{ "]h", function() require("gitsigns").nav_hunk("next") end, desc = "Next git hunk" },
-			{ "[h", function() require("gitsigns").nav_hunk("prev") end, desc = "Previous git hunk" },
-			{ "<leader>gp", function() require("gitsigns").preview_hunk() end, desc = "Preview git hunk" },
-			{ "<leader>gs", function() require("gitsigns").stage_hunk() end, desc = "Stage git hunk" },
-			{ "<leader>gr", function() require("gitsigns").reset_hunk() end, desc = "Reset git hunk" },
-			{ "<leader>gb", function() require("gitsigns").blame_line() end, desc = "Git blame line" },
-			{ "<leader>gd", function() require("gitsigns").diffthis() end, desc = "Git diff file" },
+			{
+				"]h",
+				function()
+					require("gitsigns").nav_hunk("next")
+				end,
+				desc = "Next git hunk",
+			},
+			{
+				"[h",
+				function()
+					require("gitsigns").nav_hunk("prev")
+				end,
+				desc = "Previous git hunk",
+			},
+			{
+				"<leader>gp",
+				function()
+					require("gitsigns").preview_hunk()
+				end,
+				desc = "Preview git hunk",
+			},
+			{
+				"<leader>gs",
+				function()
+					require("gitsigns").stage_hunk()
+				end,
+				desc = "Stage git hunk",
+			},
+			{
+				"<leader>gr",
+				function()
+					require("gitsigns").reset_hunk()
+				end,
+				desc = "Reset git hunk",
+			},
+			{
+				"<leader>gb",
+				function()
+					require("gitsigns").blame_line()
+				end,
+				desc = "Git blame line",
+			},
+			{
+				"<leader>gd",
+				function()
+					require("gitsigns").diffthis()
+				end,
+				desc = "Git diff file",
+			},
 		},
 	},
 
@@ -244,7 +334,28 @@ require("lazy").setup({
 			require("dap-python").setup(debug_python())
 			require("dap-python").test_runner = "pytest"
 			add_remote_python_targets(dap)
-			dapui.setup()
+
+			dapui.setup({
+				layouts = {
+					{
+						elements = {
+							{ id = "scopes", size = 0.25 },
+							{ id = "breakpoints", size = 0.25 },
+							{ id = "stacks", size = 0.25 },
+							{ id = "watches", size = 0.25 },
+						},
+						position = "left",
+						size = 40,
+					},
+					{
+						elements = {
+							{ id = "repl", size = 1.0 },
+						},
+						position = "bottom",
+						size = 15,
+					},
+				},
+			})
 
 			dap.listeners.before.attach.dapui_config = function()
 				dapui.open()
@@ -258,6 +369,22 @@ require("lazy").setup({
 			dap.listeners.before.event_exited.dapui_config = function()
 				dapui.close()
 			end
+
+			local function focus_dap_repl()
+				dapui.open({ layout = 2 })
+
+				local repl_buffer = dapui.elements.repl.buffer()
+				local windows = vim.fn.win_findbuf(repl_buffer)
+
+				if #windows > 0 then
+					vim.api.nvim_set_current_win(windows[1])
+					vim.cmd.startinsert()
+				end
+			end
+
+			vim.keymap.set("n", "<leader>de", focus_dap_repl, {
+				desc = "Debug: evaluate in REPL",
+			})
 
 			vim.keymap.set("n", "<leader>dc", dap.continue, { desc = "Debug: continue/start" })
 			vim.keymap.set("n", "<leader>db", dap.toggle_breakpoint, { desc = "Debug: breakpoint" })
@@ -414,4 +541,3 @@ require("lazy").setup({
 	checker = { enabled = false },
 	change_detection = { notify = false },
 })
-

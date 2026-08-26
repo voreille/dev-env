@@ -270,6 +270,7 @@ install_tree_sitter() {
 		"$rustup_init" -y --profile minimal --default-toolchain stable --no-modify-path
 	CARGO_HOME="$cargo_home" RUSTUP_HOME="$rustup_home" \
 		"$cargo_home/bin/cargo" install --locked \
+		--no-default-features \
 		--version "$TREE_SITTER_VERSION" \
 		--root "$dst" \
 		tree-sitter-cli

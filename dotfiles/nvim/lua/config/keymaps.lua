@@ -7,7 +7,7 @@ map("n", "<leader>q", "<cmd>quit<CR>", { desc = "Quit" })
 -- Edit dev-env configuration. ~/.config/dev-env/bashrc is a symlink back to
 -- this repository, so edits remain version controlled.
 map("n", "<leader>cb", function()
-  vim.cmd.edit(vim.fn.expand("~/.config/dev-env/bashrc"))
+	vim.cmd.edit(vim.fn.expand("~/.config/dev-env/bashrc"))
 end, { desc = "Config: bash" })
 
 -- Window movement.
@@ -22,11 +22,66 @@ map("v", ">", ">gv")
 
 -- Diagnostics. Keep Vim-style mappings, but provide QWERTZ-friendly leader
 -- alternatives because [ and ] are awkward on many Swiss keyboards.
-map("n", "[d", function() vim.diagnostic.jump({ count = -1, float = true }) end, { desc = "Previous diagnostic" })
-map("n", "]d", function() vim.diagnostic.jump({ count = 1, float = true }) end, { desc = "Next diagnostic" })
-map("n", "<leader>dp", function() vim.diagnostic.jump({ count = -1, float = true }) end, { desc = "Diagnostic: previous" })
-map("n", "<leader>dn", function() vim.diagnostic.jump({ count = 1, float = true }) end, { desc = "Diagnostic: next" })
+map("n", "[d", function()
+	vim.diagnostic.jump({ count = -1, float = true })
+end, { desc = "Previous diagnostic" })
+map("n", "]d", function()
+	vim.diagnostic.jump({ count = 1, float = true })
+end, { desc = "Next diagnostic" })
+map("n", "<leader>dp", function()
+	vim.diagnostic.jump({ count = -1, float = true })
+end, { desc = "Diagnostic: previous" })
+map("n", "<leader>dn", function()
+	vim.diagnostic.jump({ count = 1, float = true })
+end, { desc = "Diagnostic: next" })
 map("n", "<leader>de", vim.diagnostic.open_float, { desc = "Diagnostic: details" })
 
 -- buffer movement
 map("n", "<leader><leader>", "<C-^>", { desc = "Previous buffer" })
+
+-- send buffer to tmux
+local function send_buffer_to_tmux()
+	if not vim.env.TMUX then
+		vim.notify("Neovim is not running inside tmux", vim.log.levels.ERROR)
+		return
+	end
+
+	local target = vim.fn.input("Tmux target: ", ":2")
+	if target == "" then
+		return
+	end
+
+	local command = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), "\n")
+
+	local loaded = vim.system({ "tmux", "load-buffer", "-" }, { stdin = command }):wait()
+
+	if loaded.code ~= 0 then
+		vim.notify(loaded.stderr, vim.log.levels.ERROR)
+		return
+	end
+
+	local pasted = vim.system({
+		"tmux",
+		"paste-buffer",
+		"-d",
+		"-t",
+		target,
+	}):wait()
+
+	if pasted.code ~= 0 then
+		vim.notify(pasted.stderr, vim.log.levels.ERROR)
+		return
+	end
+
+	vim.system({
+		"tmux",
+		"send-keys",
+		"-t",
+		target,
+		"Enter",
+	})
+end
+
+map("n", "<leader>tx", send_buffer_to_tmux, {
+	desc = "Tmux: execute buffer",
+})
