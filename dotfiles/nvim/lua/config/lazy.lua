@@ -212,7 +212,14 @@ require("lazy").setup({
 
 	{
 		"lewis6991/gitsigns.nvim",
-		opts = {},
+		event = { "BufReadPre", "BufNewFile" },
+
+		opts = {
+			signcolumn = true,
+			numhl = true,
+			linehl = false,
+		},
+
 		keys = {
 			{
 				"]h",
@@ -259,9 +266,16 @@ require("lazy").setup({
 			{
 				"<leader>gd",
 				function()
-					require("gitsigns").diffthis()
+					require("gitsigns").diffthis(nil, { vertical = true })
 				end,
 				desc = "Git diff file",
+			},
+			{
+				"<leader>gD",
+				function()
+					require("gitsigns").diffthis("~1", { vertical = true })
+				end,
+				desc = "Git diff file against HEAD",
 			},
 		},
 	},
