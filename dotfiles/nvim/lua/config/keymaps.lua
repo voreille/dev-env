@@ -85,3 +85,8 @@ end
 map("n", "<leader>tx", send_buffer_to_tmux, {
 	desc = "Tmux: execute buffer",
 })
+
+-- general quit
+map("n", "<leader>Q", "<cmd>confirm qall<CR>", {
+    desc = "Quit all with confirmation",
+})

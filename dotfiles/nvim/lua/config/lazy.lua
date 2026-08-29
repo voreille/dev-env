@@ -134,7 +134,7 @@ require("lazy").setup({
 				function()
 					require("fzf-lua").lsp_document_symbols()
 				end,
-				desc = "Document symbols",
+				desc = "All document symbols",
 			},
 			{
 				"<leader>fs",
@@ -174,7 +174,6 @@ require("lazy").setup({
 			{ "<leader>fo", "<cmd>Oil<CR>", desc = "Oil" },
 		},
 	},
-
 	{
 		"Mofiqul/dracula.nvim",
 		priority = 1000,
@@ -190,8 +189,14 @@ require("lazy").setup({
 				["@lsp.type.function.python"] = { fg = "#50fa7b" },
 				["@lsp.type.method.python"] = { fg = "#50fa7b" },
 
-				["@variable.parameter"] = { fg = "#ffb86c", italic = true },
-				["@lsp.type.parameter.python"] = { fg = "#ffb86c", italic = true },
+				["@variable.parameter"] = {
+					fg = "#ffb86c",
+					italic = true,
+				},
+				["@lsp.type.parameter.python"] = {
+					fg = "#ffb86c",
+					italic = true,
+				},
 
 				["@type"] = { fg = "#8be9fd" },
 				["@type.builtin"] = { fg = "#8be9fd" },
@@ -199,9 +204,27 @@ require("lazy").setup({
 				["@constructor"] = { fg = "#8be9fd" },
 				["@lsp.type.class.python"] = { fg = "#8be9fd" },
 
-				["@variable.builtin"] = { fg = "#bd93f9", italic = true },
+				["@variable.builtin"] = {
+					fg = "#bd93f9",
+					italic = true,
+				},
 				["@variable.member"] = { fg = "#8be9fd" },
 				["@property"] = { fg = "#8be9fd" },
+
+				-- Floating completion and signature windows.
+				DevPopup = {
+					fg = "#f8f8f2",
+					bg = "#343746",
+				},
+				DevPopupBorder = {
+					fg = "#bd93f9",
+					bg = "#343746",
+				},
+				DevPopupSelection = {
+					fg = "#f8f8f2",
+					bg = "#44475a",
+					bold = true,
+				},
 			}
 
 			for group, opts in pairs(highlights) do
@@ -279,17 +302,60 @@ require("lazy").setup({
 			},
 		},
 	},
-
 	{
 		"saghen/blink.cmp",
 		version = "1.*",
+
 		opts = {
 			keymap = { preset = "default" },
-			sources = { default = { "lsp", "path", "snippets", "buffer" } },
-			signature = { enabled = true },
+
+			sources = {
+				default = { "lsp", "path", "snippets", "buffer" },
+			},
+
+			completion = {
+				menu = {
+					border = "rounded",
+					winblend = 0,
+					winhighlight = table.concat({
+						"Normal:DevPopup",
+						"FloatBorder:DevPopupBorder",
+						"CursorLine:DevPopupSelection",
+						"Search:None",
+					}, ","),
+				},
+
+				documentation = {
+					auto_show = true,
+					auto_show_delay_ms = 300,
+
+					window = {
+						border = "rounded",
+						winblend = 0,
+						winhighlight = table.concat({
+							"Normal:DevPopup",
+							"FloatBorder:DevPopupBorder",
+							"CursorLine:DevPopupSelection",
+							"Search:None",
+						}, ","),
+					},
+				},
+			},
+
+			signature = {
+				enabled = true,
+
+				window = {
+					border = "rounded",
+					winblend = 0,
+					winhighlight = table.concat({
+						"Normal:DevPopup",
+						"FloatBorder:DevPopupBorder",
+					}, ","),
+				},
+			},
 		},
 	},
-
 	{
 		"neovim/nvim-lspconfig",
 		dependencies = { "saghen/blink.cmp" },
@@ -541,7 +607,6 @@ require("lazy").setup({
 			})
 		end,
 	},
-
 	{
 		"MeanderingProgrammer/render-markdown.nvim",
 		ft = { "markdown" },
@@ -550,6 +615,37 @@ require("lazy").setup({
 			"nvim-tree/nvim-web-devicons",
 		},
 		opts = {},
+	},
+	{
+		"github/copilot.vim",
+		event = "InsertEnter",
+	},
+
+	{
+		"stevearc/aerial.nvim",
+		opts = {
+			highlight_on_hover = true,
+
+			-- Full outline: AerialToggle float
+			keymaps = {
+				["<Esc>"] = "actions.close",
+			},
+
+			-- Compact navigator: AerialNavToggle
+			nav = {
+				keymaps = {
+					["<Esc>"] = "actions.close",
+					["q"] = "actions.close",
+				},
+			},
+		},
+		keys = {
+			{
+				"<leader>o",
+				"<cmd>AerialToggle float<CR>",
+				desc = "Document outline",
+			},
+		},
 	},
 }, {
 	checker = { enabled = false },
