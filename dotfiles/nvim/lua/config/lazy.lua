@@ -498,6 +498,16 @@ require("lazy").setup({
 				mappings = {
 					["l"] = "open",
 					["h"] = "close_node",
+					["Y"] = function(state)
+						local node = state.tree:get_node()
+						local path = node:get_id()
+
+						-- Yank to both Neovim and the system clipboard.
+						vim.fn.setreg('"', path)
+						vim.fn.setreg("+", path)
+
+						vim.notify("Yanked: " .. path)
+					end,
 				},
 			},
 		},
