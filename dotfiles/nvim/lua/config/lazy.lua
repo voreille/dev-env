@@ -410,51 +410,68 @@ require("lazy").setup({
 		config = function()
 			local dap = require("dap")
 			local dapui = require("dapui")
+			local dap_python = require("dap-python")
 
-			require("dap-python").setup(debug_python())
-			require("dap-python").test_runner = "pytest"
+			dap_python.setup(debug_python())
+			dap_python.test_runner = "pytest"
 			add_remote_python_targets(dap)
 
 			dapui.setup({
 				layouts = {
+					-- This layout is first so the sidebar keeps the full height.
 					{
 						elements = {
-							{ id = "scopes", size = 0.25 },
-							{ id = "breakpoints", size = 0.25 },
-							{ id = "stacks", size = 0.25 },
-							{ id = "watches", size = 0.25 },
+							{ id = "scopes", size = 0.30 },
+							{ id = "stacks", size = 0.30 },
+							{ id = "breakpoints", size = 0.20 },
+							{ id = "watches", size = 0.20 },
 						},
 						position = "left",
 						size = 40,
 					},
+
+					-- Because this layout is second, it appears below the code
+					-- rather than underneath the left DAP sidebar.
 					{
 						elements = {
-							{ id = "repl", size = 1.0 },
+							{ id = "repl", size = 0.50 },
+							{ id = "console", size = 0.50 },
 						},
 						position = "bottom",
 						size = 15,
 					},
 				},
+
+				controls = {
+					enabled = true,
+					element = "repl",
+				},
+
+				render = {
+					max_type_length = 60,
+					max_value_lines = 200,
+				},
 			})
 
-			dap.listeners.before.attach.dapui_config = function()
+			local function open_debug_ui()
+				-- Prevent Neo-tree and the DAP sidebar from competing for space.
+				pcall(vim.cmd, "Neotree close")
 				dapui.open()
-			end
-			dap.listeners.before.launch.dapui_config = function()
-				dapui.open()
-			end
-			dap.listeners.before.event_terminated.dapui_config = function()
-				dapui.close()
-			end
-			dap.listeners.before.event_exited.dapui_config = function()
-				dapui.close()
 			end
 
-			local function focus_dap_repl()
+			-- Open only after the debugger has initialized. This avoids the
+			-- open-close flicker from the old launch/exit listeners.
+			dap.listeners.after.event_initialized["dapui_config"] = open_debug_ui
+
+			-- Deliberately do not close automatically on event_exited or
+			-- event_terminated. Toggle the UI manually with <leader>du.
+
+			local function focus_dap_element(element)
+				-- Layout 2 contains both the REPL and console.
 				dapui.open({ layout = 2 })
 
-				local repl_buffer = dapui.elements.repl.buffer()
-				local windows = vim.fn.win_findbuf(repl_buffer)
+				local buffer = dapui.elements[element].buffer()
+				local windows = vim.fn.win_findbuf(buffer)
 
 				if #windows > 0 then
 					vim.api.nvim_set_current_win(windows[1])
@@ -462,20 +479,48 @@ require("lazy").setup({
 				end
 			end
 
-			vim.keymap.set("n", "<leader>de", focus_dap_repl, {
-				desc = "Debug: evaluate in REPL",
+			vim.keymap.set("n", "<leader>dc", dap.continue, {
+				desc = "Debug: continue/start",
 			})
 
-			vim.keymap.set("n", "<leader>dc", dap.continue, { desc = "Debug: continue/start" })
-			vim.keymap.set("n", "<leader>db", dap.toggle_breakpoint, { desc = "Debug: breakpoint" })
-			vim.keymap.set("n", "<leader>do", dap.step_over, { desc = "Debug: step over" })
-			vim.keymap.set("n", "<leader>di", dap.step_into, { desc = "Debug: step into" })
-			vim.keymap.set("n", "<leader>dO", dap.step_out, { desc = "Debug: step out" })
-			vim.keymap.set("n", "<leader>du", dapui.toggle, { desc = "Debug UI" })
-			vim.keymap.set("n", "<leader>dr", dap.repl.open, { desc = "Debug REPL" })
+			vim.keymap.set("n", "<leader>db", dap.toggle_breakpoint, {
+				desc = "Debug: breakpoint",
+			})
+
+			vim.keymap.set("n", "<leader>do", dap.step_over, {
+				desc = "Debug: step over",
+			})
+
+			vim.keymap.set("n", "<leader>di", dap.step_into, {
+				desc = "Debug: step into",
+			})
+
+			vim.keymap.set("n", "<leader>dO", dap.step_out, {
+				desc = "Debug: step out",
+			})
+
+			vim.keymap.set("n", "<leader>du", dapui.toggle, {
+				desc = "Debug: toggle UI",
+			})
+
+			-- Focus the existing dap-ui REPL instead of opening another one.
+			vim.keymap.set("n", "<leader>dr", function()
+				focus_dap_element("repl")
+			end, {
+				desc = "Debug: focus REPL",
+			})
+
+			vim.keymap.set("n", "<leader>dC", function()
+				focus_dap_element("console")
+			end, {
+				desc = "Debug: focus console",
+			})
+
 			vim.keymap.set("n", "<leader>dt", function()
-				require("dap-python").test_method()
-			end, { desc = "Debug test method" })
+				dap_python.test_method()
+			end, {
+				desc = "Debug: test method",
+			})
 		end,
 	},
 
