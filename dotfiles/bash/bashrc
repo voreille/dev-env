@@ -19,6 +19,7 @@ alias gl='git log --oneline --decorate --graph -20'
 alias v='nvim'
 alias vim='nvim'
 alias lg='lazygit'
+alias ya='yazi'
 
 # Yazi wrapper: when Yazi exits, follow its final directory in the current shell.
 y() {

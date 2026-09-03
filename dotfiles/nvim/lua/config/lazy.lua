@@ -521,12 +521,6 @@ require("lazy").setup({
 				desc = "Debug: focus REPL",
 			})
 
-			map("n", "<leader>dC", function()
-				focus_dap_element("console")
-			end, {
-				desc = "Debug: focus console",
-			})
-
 			map("n", "<leader>dt", dap_python.test_method, {
 				desc = "Debug: test method",
 			})
