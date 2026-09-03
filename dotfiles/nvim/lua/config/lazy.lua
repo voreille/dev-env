@@ -116,7 +116,7 @@ require("lazy").setup({
 				desc = "Live grep",
 			},
 			{
-				"<leader>fb",
+				"<leader>b",
 				function()
 					require("fzf-lua").buffers()
 				end,
