@@ -23,14 +23,27 @@ end
 
 local function project_python()
 	local candidates = {}
+
+	-- Prefer a project-local uv/venv environment.
+	local root = vim.fs.root(0, { "pyproject.toml", ".git" })
+	if root then
+		table.insert(candidates, root .. "/.venv/bin/python")
+	end
+
+	-- Then an explicitly activated virtualenv.
 	if vim.env.VIRTUAL_ENV and vim.env.VIRTUAL_ENV ~= "" then
 		table.insert(candidates, vim.env.VIRTUAL_ENV .. "/bin/python")
 	end
+
+	-- Then an activated Conda environment.
 	if vim.env.CONDA_PREFIX and vim.env.CONDA_PREFIX ~= "" then
 		table.insert(candidates, vim.env.CONDA_PREFIX .. "/bin/python")
 	end
-	table.insert(candidates, vim.fn.getcwd() .. "/.venv/bin/python")
+
+	-- Global development tools environment.
 	table.insert(candidates, python_tools)
+
+	-- Final system fallback.
 	table.insert(candidates, vim.fn.exepath("python3"))
 
 	for _, python in ipairs(candidates) do
@@ -38,6 +51,7 @@ local function project_python()
 			return python
 		end
 	end
+
 	return "python3"
 end
 
@@ -705,6 +719,61 @@ require("lazy").setup({
 			},
 		},
 	},
+    {
+	"jpalardy/vim-slime",
+	ft = { "python" },
+
+	init = function()
+		vim.g.slime_target = "tmux"
+		vim.g.slime_no_mappings = 1
+
+		-- Accept both "#%%" and "# %%".
+		vim.g.slime_cell_delimiter = "#\\s*%%"
+
+		-- Your Alt-x side pane is tmux pane 2.
+		vim.g.slime_default_config = {
+			socket_name = "default",
+			target_pane = ":.2",
+		}
+		vim.g.slime_dont_ask_default = 1
+
+		vim.g.slime_python_ipython = 1
+		vim.g.slime_bracketed_paste = 1
+	end,
+
+	keys = {
+		{
+			"<leader>rc",
+			"<Plug>SlimeSendCell",
+			desc = "Run current Python cell",
+		},
+		{
+			"<leader>rl",
+			"<Plug>SlimeLineSend",
+			desc = "Run current line",
+		},
+		{
+			"<leader>rs",
+			"<Plug>SlimeRegionSend",
+			mode = "x",
+			desc = "Run selected Python code",
+		},
+		{
+			"<leader>rn",
+			function()
+				vim.fn.search("^#\\s*%%", "W")
+			end,
+			desc = "Next Python cell",
+		},
+		{
+			"<leader>rp",
+			function()
+				vim.fn.search("^#\\s*%%", "bW")
+			end,
+			desc = "Previous Python cell",
+		},
+	},
+},
 }, {
 	checker = { enabled = false },
 	change_detection = { notify = false },
