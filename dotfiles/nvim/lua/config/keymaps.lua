@@ -88,5 +88,26 @@ map("n", "<leader>tx", send_buffer_to_tmux, {
 
 -- general quit
 map("n", "<leader>Q", "<cmd>confirm qall<CR>", {
-    desc = "Quit all with confirmation",
+	desc = "Quit all with confirmation",
+})
+
+-- toggle tick todo in md
+vim.api.nvim_create_autocmd("FileType", {
+	pattern = "markdown",
+	callback = function(args)
+		vim.keymap.set("n", "<localleader>x", function()
+			local line = vim.api.nvim_get_current_line()
+
+			if line:match("%- %[ %]") then
+				line = line:gsub("%- %[ %]", "- [x]", 1)
+			elseif line:match("%- %[x%]") then
+				line = line:gsub("%- %[x%]", "- [ ]", 1)
+			end
+
+			vim.api.nvim_set_current_line(line)
+		end, {
+			buffer = args.buf,
+			desc = "Toggle Markdown checkbox",
+		})
+	end,
 })

@@ -98,7 +98,9 @@ require("lazy").setup({
 				{ "<leader>c", group = "config/code" },
 				{ "<leader>d", group = "debug/diagnostics" },
 				{ "<leader>f", group = "find/files" },
+				{ "<leader>g", group = "git" },
 				{ "<leader>l", group = "LSP" },
+				{ "<leader>r", group = "run" },
 			},
 		},
 	},
@@ -238,6 +240,21 @@ require("lazy").setup({
 					fg = "#f8f8f2",
 					bg = "#44475a",
 					bold = true,
+				},
+				TreesitterContext = {
+					bg = "#343746",
+				},
+				TreesitterContextLineNumber = {
+					fg = "#6272a4",
+					bg = "#343746",
+				},
+				TreesitterContextBottom = {
+					underline = true,
+					sp = "#6272a4",
+				},
+				TreesitterContextLineNumberBottom = {
+					underline = true,
+					sp = "#6272a4",
 				},
 			}
 
@@ -719,61 +736,81 @@ require("lazy").setup({
 			},
 		},
 	},
-    {
-	"jpalardy/vim-slime",
-	ft = { "python" },
+	{
+		"jpalardy/vim-slime",
+		ft = { "python" },
 
-	init = function()
-		vim.g.slime_target = "tmux"
-		vim.g.slime_no_mappings = 1
+		init = function()
+			vim.g.slime_target = "tmux"
+			vim.g.slime_no_mappings = 1
 
-		-- Accept both "#%%" and "# %%".
-		vim.g.slime_cell_delimiter = "#\\s*%%"
+			-- Accept both "#%%" and "# %%".
+			vim.g.slime_cell_delimiter = "#\\s*%%"
 
-		-- Your Alt-x side pane is tmux pane 2.
-		vim.g.slime_default_config = {
-			socket_name = "default",
-			target_pane = ":.2",
-		}
-		vim.g.slime_dont_ask_default = 1
+			-- Your Alt-x side pane is tmux pane 2.
+			vim.g.slime_default_config = {
+				socket_name = "default",
+				target_pane = ":.2",
+			}
+			vim.g.slime_dont_ask_default = 1
 
-		vim.g.slime_python_ipython = 1
-		vim.g.slime_bracketed_paste = 1
-	end,
+			vim.g.slime_python_ipython = 1
+			vim.g.slime_bracketed_paste = 1
+		end,
 
-	keys = {
-		{
-			"<leader>rc",
-			"<Plug>SlimeSendCell",
-			desc = "Run current Python cell",
-		},
-		{
-			"<leader>rl",
-			"<Plug>SlimeLineSend",
-			desc = "Run current line",
-		},
-		{
-			"<leader>rs",
-			"<Plug>SlimeRegionSend",
-			mode = "x",
-			desc = "Run selected Python code",
-		},
-		{
-			"<leader>rn",
-			function()
-				vim.fn.search("^#\\s*%%", "W")
-			end,
-			desc = "Next Python cell",
-		},
-		{
-			"<leader>rp",
-			function()
-				vim.fn.search("^#\\s*%%", "bW")
-			end,
-			desc = "Previous Python cell",
+		keys = {
+			{
+				"<leader>rc",
+				"<Plug>SlimeSendCell",
+				desc = "Run current Python cell",
+			},
+			{
+				"<leader>rl",
+				"<Plug>SlimeLineSend",
+				desc = "Run current line",
+			},
+			{
+				"<leader>rs",
+				"<Plug>SlimeRegionSend",
+				mode = "x",
+				desc = "Run selected Python code",
+			},
+			{
+				"<leader>rj",
+				function()
+					vim.fn.search("^#\\s*%%", "W")
+				end,
+				desc = "Next Python cell",
+			},
+			{
+				"<leader>rk",
+				function()
+					vim.fn.search("^#\\s*%%", "bW")
+				end,
+				desc = "Previous Python cell",
+			},
 		},
 	},
-},
+	{
+		"nvim-treesitter/nvim-treesitter-context",
+		dependencies = {
+			"nvim-treesitter/nvim-treesitter",
+		},
+		opts = {
+			max_lines = 3,
+			mode = "cursor",
+		},
+	},
+	{
+		"nvim-treesitter/nvim-treesitter-context",
+		dependencies = {
+			"nvim-treesitter/nvim-treesitter",
+		},
+		opts = {
+			max_lines = 3,
+			mode = "cursor",
+		},
+	},
 }, {
 	checker = { enabled = false },
 	change_detection = { notify = false },
