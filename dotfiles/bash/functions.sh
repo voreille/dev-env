@@ -19,33 +19,33 @@ tmux-work() {
     tmux new-window -t "$name" -n monitor -c "$dir"
 
     # Start with one full-size pane.
-    local htop_pane
-    htop_pane="$(tmux display-message -p -t "$name:monitor" '#{pane_id}')"
+    local top_left_pane
+    top_left_pane="$(tmux display-message -p -t "$name:monitor" '#{pane_id}')"
 
     # Small bottom pane (~25% height).
-    local top_pane
-    top_pane="$(
+    local bottom_pane
+    bottom_pane="$(
         tmux split-window \
             -v \
-            -p 25 \
-            -t "$htop_pane" \
+            -p 35 \
+            -t "$top_left_pane" \
             -c "$dir" \
             -P -F '#{pane_id}'
     )"
 
     # Split the large top area in two.
-    local nvtop_pane
-    nvtop_pane="$(
+    local top_right_pane
+    top_right_pane="$(
         tmux split-window \
             -h \
-            -t "$htop_pane" \
+            -t "$top_left_pane" \
             -c "$dir" \
             -P -F '#{pane_id}'
     )"
 
-    tmux send-keys -t "$htop_pane" 'htop' C-m
-    tmux send-keys -t "$nvtop_pane" 'nvtop' C-m
-    tmux send-keys -t "$top_pane" 'top' C-m
+    tmux send-keys -t "$top_left_pane" 'top' C-m
+    tmux send-keys -t "$top_right_pane" 'nvtop' C-m
+    tmux send-keys -t "$bottom_pane" 'htop' C-m
 
     # Start in window 1.
     tmux select-window -t "$name:nvim"
@@ -96,8 +96,8 @@ tconda() {
     # Query Conda without activating it in the current shell.
     env="$(
         "$root/bin/conda" env list |
-        awk 'NF && $1 !~ /^#/ { print $1 }' |
-        fzf --prompt="Conda env > "
+            awk 'NF && $1 !~ /^#/ { print $1 }' |
+            fzf --prompt="Conda env > "
     )"
 
     [ -n "$env" ] || return
