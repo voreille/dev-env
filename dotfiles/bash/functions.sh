@@ -27,7 +27,7 @@ tmux-work() {
     bottom_pane="$(
         tmux split-window \
             -v \
-            -p 35 \
+            -l 35% \
             -t "$top_left_pane" \
             -c "$dir" \
             -P -F '#{pane_id}'
