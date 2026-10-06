@@ -111,3 +111,9 @@ vim.api.nvim_create_autocmd("FileType", {
 		})
 	end,
 })
+
+-- Tabs (a tab = a window layout, e.g. diffview or debugging; files go in buffers)
+map("n", "<leader>tn", "<cmd>tabnew<CR>", { desc = "Tab: new" })
+map("n", "<leader>tq", "<cmd>tabclose<CR>", { desc = "Tab: close" })
+map("n", "<leader>to", "<cmd>tabonly<CR>", { desc = "Tab: close others" })
+map("n", "<leader>tl", "<cmd>tabs<CR>", { desc = "Tab: list" })

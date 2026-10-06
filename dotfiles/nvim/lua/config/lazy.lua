@@ -101,6 +101,7 @@ require("lazy").setup({
 				{ "<leader>g", group = "git" },
 				{ "<leader>l", group = "LSP" },
 				{ "<leader>r", group = "run" },
+                { "<leader>t", group = "tabs/tmux" },
 			},
 		},
 	},
@@ -331,6 +332,40 @@ require("lazy").setup({
 				end,
 				desc = "Git diff file against HEAD",
 			},
+			{
+				"<leader>gB",
+				function()
+					require("gitsigns").change_base("@{upstream}", true)
+				end,
+				desc = "Gitsigns: compare to upstream",
+			},
+			{
+				"<leader>gR",
+				function()
+					require("gitsigns").change_base(nil, true)
+				end,
+				desc = "Gitsigns: compare to HEAD (default)",
+			},
+		},
+	},
+	{
+		"sindrets/diffview.nvim",
+		cmd = { "DiffviewOpen", "DiffviewFileHistory" },
+		keys = {
+			{
+				"<leader>go",
+				function()
+					-- Outgoing changes: commits not yet pushed (falls back to main if no upstream)
+					vim.fn.system({ "git", "rev-parse", "--abbrev-ref", "@{upstream}" })
+					local base = vim.v.shell_error == 0 and "@{upstream}" or "main"
+					vim.cmd("DiffviewOpen " .. base .. "...HEAD")
+				end,
+				desc = "Git outgoing changes",
+			},
+			{ "<leader>gv", "<cmd>DiffviewOpen<CR>", desc = "Git uncommitted changes" },
+			{ "<leader>gh", "<cmd>DiffviewFileHistory %<CR>", desc = "Git file history" },
+			{ "<leader>gH", "<cmd>DiffviewFileHistory<CR>", desc = "Git repo history" },
+			{ "<leader>gq", "<cmd>DiffviewClose<CR>", desc = "Git close diffview" },
 		},
 	},
 	{

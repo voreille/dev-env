@@ -17,6 +17,7 @@ opt.scrolloff = 5
 opt.sidescrolloff = 5
 opt.completeopt = { "menu", "menuone", "noselect" }
 opt.termguicolors = true
+opt.showtabline = 2
 
 -- Coding defaults. Python and most source files use 4 spaces; YAML uses 2.
 opt.expandtab = true
