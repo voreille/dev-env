@@ -4,6 +4,31 @@ opt.number = true
 opt.relativenumber = true
 opt.mouse = "a"
 opt.clipboard = "unnamedplus"
+
+-- Without a usable clipboard tool (claude-box, SSH servers), copy through the terminal
+-- with OSC 52 (tmux -> Alacritty). Paste returns the last yank instead of asking the
+-- terminal, which Alacritty does not answer.
+local has_clipboard_tool = (vim.env.WAYLAND_DISPLAY and vim.fn.executable("wl-copy") == 1)
+  or (vim.env.DISPLAY and (vim.fn.executable("xclip") == 1 or vim.fn.executable("xsel") == 1))
+if not has_clipboard_tool then
+  local osc52 = require("vim.ui.clipboard.osc52")
+  local last = { {}, "v" }
+  local function copy(reg)
+    local send = osc52.copy(reg)
+    return function(lines, regtype)
+      last = { lines, regtype }
+      send(lines)
+    end
+  end
+  local function paste()
+    return last
+  end
+  vim.g.clipboard = {
+    name = "OSC 52",
+    copy = { ["+"] = copy("+"), ["*"] = copy("*") },
+    paste = { ["+"] = paste, ["*"] = paste },
+  }
+end
 opt.breakindent = true
 opt.undofile = true
 opt.ignorecase = true
