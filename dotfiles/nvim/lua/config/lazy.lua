@@ -697,7 +697,7 @@ require("lazy").setup({
 		"nvim-treesitter/nvim-treesitter",
 		branch = "main",
 		lazy = false,
-		build = ":TSUpdate lua python bash yaml json markdown markdown_inline",
+		build = ":TSUpdate lua python bash yaml json markdown markdown_inline latex",
 		init = function()
 			-- tree-sitter-lua uses main; apply this before Lazy's build command.
 			vim.api.nvim_create_autocmd("User", {
@@ -719,6 +719,7 @@ require("lazy").setup({
 				"json",
 				"markdown",
 				"markdown_inline",
+				"latex",
 			})
 
 			vim.api.nvim_create_autocmd("FileType", {
@@ -738,7 +739,15 @@ require("lazy").setup({
 			"nvim-treesitter/nvim-treesitter",
 			"nvim-tree/nvim-web-devicons",
 		},
-		opts = {},
+		opts = {
+			-- Math is shown as one-line Unicode (x^2 -> x²) by our pylatexenc wrapper.
+			latex = {
+				converter = vim.fn.stdpath("config") .. "/scripts/tex2unicode",
+				position = "center",
+			},
+			-- No raw HTML in notes; also avoids needing the html parser.
+			html = { enabled = false },
+		},
 	},
 	{
 		"github/copilot.vim",

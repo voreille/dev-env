@@ -281,7 +281,7 @@ install_tree_sitter() {
 install_python_tools() {
 	echo "Installing editor Python tooling using host python3"
 	"$BIN_DIR/uv" venv --python "$(command -v python3)" --clear "$TOOLS_VENV"
-	"$BIN_DIR/uv" pip install --python "$TOOLS_VENV/bin/python" debugpy pyright ruff
+	"$BIN_DIR/uv" pip install --python "$TOOLS_VENV/bin/python" debugpy pyright ruff pylatexenc
 
 	local tool
 	for tool in debugpy pyright pyright-langserver ruff; do

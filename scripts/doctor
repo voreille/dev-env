@@ -89,6 +89,12 @@ printf '\nEditor Python tools:\n'
 check_present Pyright pyright-langserver
 check_present Ruff ruff
 check_present debugpy debugpy
+if "$PREFIX/share/dev-env/python-tools/bin/python" -c 'import pylatexenc' >/dev/null 2>&1; then
+	printf '[ok]   %-16s %s\n' pylatexenc "$PREFIX/share/dev-env/python-tools"
+else
+	printf '[miss] %-16s\n' pylatexenc
+	ok=0
+fi
 
 printf '\nHost/infrastructure tools:\n'
 for cmd in curl tar git ssh python3 cc c++ conda tmux docker; do

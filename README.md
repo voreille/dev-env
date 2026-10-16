@@ -174,7 +174,8 @@ The bootstrap keeps editor tooling separate from project environments:
 ~/.local/share/dev-env/python-tools
 ├── pyright
 ├── ruff
-└── debugpy
+├── debugpy
+└── pylatexenc   (Markdown math, see below)
 ```
 
 Pyright and Ruff are therefore always available to Neovim. When Neovim was launched from an activated Conda/virtual environment, the config points Python analysis at that interpreter.
@@ -211,6 +212,14 @@ nvim .
 ```
 
 F5 will then include `Attach: API` and `Attach: Worker` configurations.
+
+## Markdown math
+
+`render-markdown.nvim` shows LaTeX math (`$...$`, `$$...$$`) as one-line Unicode in place of the
+source, e.g. `\min \mathbb{E}\|W\phi(u)-u\|^2` → `min 𝔼‖Wϕ(u)−u‖²`. The source comes back on the
+cursor line. Conversion is done by `dotfiles/nvim/scripts/tex2unicode` (pylatexenc + Unicode
+super/subscripts); missing glyphs fall back to `_(...)` / `^(...)`. `:RenderMarkdown toggle` turns
+rendering off.
 
 ## tmux
 

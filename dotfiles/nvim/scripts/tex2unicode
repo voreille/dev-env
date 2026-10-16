@@ -1,0 +1,100 @@
+#!/usr/bin/env python3
+"""LaTeX math (stdin) -> one-line Unicode (stdout), used as render-markdown.nvim's latex converter.
+
+pylatexenc maps the macros (\\alpha -> α, \\mathbb{E} -> 𝔼, ...); this script adds Unicode
+super/subscripts (x^2 -> x², \\alpha_i -> αᵢ) and a few fixes pylatexenc lacks.
+"""
+import os
+import re
+import sys
+
+try:
+    from pylatexenc.latex2text import LatexNodes2Text, MacroTextSpec, get_default_latex_context_db
+except ImportError:
+    # Started by a Python without pylatexenc: re-run with the dev-env editor-tools venv.
+    venv = os.path.join(os.environ.get("DEV_ENV_PREFIX", os.path.expanduser("~/.local")), "share/dev-env/python-tools")
+    python = os.path.join(venv, "bin/python")
+    if os.path.exists(python) and os.path.realpath(sys.prefix) != os.path.realpath(venv):
+        os.execv(python, [python] + sys.argv)
+    raise
+
+SUP = dict(zip(
+    "0123456789+-−=()abcdefghijklmnoprstuvwxyzABDEGHIJKLMNOPRTUVWαβγδεθϕφχι⊤*'′⋆†,",
+    "⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁻⁼⁽⁾ᵃᵇᶜᵈᵉᶠᵍʰⁱʲᵏˡᵐⁿᵒᵖʳˢᵗᵘᵛʷˣʸᶻᴬᴮᴰᴱᴳᴴᴵᴶᴷᴸᴹᴺᴼᴾᴿᵀᵁⱽᵂᵅᵝᵞᵟᵋᶿᵠᵠᵡᶥᵀ*′′⋆†,",
+))
+SUB = dict(zip(
+    "0123456789+-−=()aehijklmnoprstuvxβγρϕφχ,",
+    "₀₁₂₃₄₅₆₇₈₉₊₋₋₌₍₎ₐₑₕᵢⱼₖₗₘₙₒₚᵣₛₜᵤᵥₓᵦᵧᵨᵩᵩᵪ,",
+))
+
+OPERATORS = ["min", "max", "argmin", "argmax", "sup", "inf", "lim", "log", "exp", "det", "tr", "Pr"]
+db = get_default_latex_context_db()
+db.add_context_category(
+    "dev-env",
+    prepend=True,
+    macros=[MacroTextSpec("|", "‖"), MacroTextSpec("arg", "arg")]
+    + [MacroTextSpec(op, op + " ") for op in OPERATORS],
+)
+to_text = LatexNodes2Text(latex_context=db, math_mode="text").latex_to_text
+
+
+def read_arg(s, i):
+    """Return (argument, next index) for the ^/_ argument starting at s[i]."""
+    while i < len(s) and s[i] == " ":
+        i += 1
+    if i >= len(s):
+        return "", i
+    if s[i] == "{":
+        depth, j = 0, i
+        while j < len(s):
+            if s[j] == "\\":
+                j += 2
+                continue
+            depth += {"{": 1, "}": -1}.get(s[j], 0)
+            if depth == 0:
+                return s[i + 1:j], j + 1
+            j += 1
+        return s[i + 1:], len(s)
+    if s[i] == "\\":
+        m = re.match(r"\\([A-Za-z]+|.)", s[i:])
+        return m.group(0), i + len(m.group(0))
+    return s[i], i + 1
+
+
+def scripts(s):
+    """Replace ^arg / _arg by Unicode super/subscripts, or ^(arg) / _(arg) when no glyph exists."""
+    out, i = [], 0
+    while i < len(s):
+        c = s[i]
+        if c == "\\":
+            m = re.match(r"\\([A-Za-z]+|.)", s[i:])
+            out.append(m.group(0))
+            i += len(m.group(0))
+        elif c in "^_":
+            arg, i = read_arg(s, i + 1)
+            text = re.sub(r"\s+", "", to_text(scripts(arg)))
+            table = SUP if c == "^" else SUB
+            if text and all(ch in table for ch in text):
+                text = "".join(table[ch] for ch in text)
+            else:
+                text = c + (text if len(text) == 1 else "(" + text + ")")
+            # {} ends a preceding macro name (\alpha{}ᵢ) and is dropped by latex2text.
+            out.append("{}" + text)
+        else:
+            out.append(c)
+            i += 1
+    return "".join(out)
+
+
+def convert(latex):
+    text = to_text(scripts(latex))
+    text = text.replace("-", "−")
+    text = re.sub(r"\s*([=≤≥<>≠≈∼∝∈∉⊂⊆→←↔⇒⇔+]|:=)\s*", r" \1 ", text)
+    text = re.sub(r"(^|[(\[{]) ([+−])", r"\1\2", text)  # unary sign: (−x), +1
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r" ([_^)\]},.;])|([(\[{]) ", r"\1\2", text)
+    return "\n".join(line.strip() for line in text.strip().splitlines())
+
+
+if __name__ == "__main__":
+    sys.stdout.write(convert(sys.stdin.read()))
