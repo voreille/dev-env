@@ -783,6 +783,34 @@ require("lazy").setup({
 				vim.g.vimtex_view_enabled = 0
 			end
 
+			-- After Ctrl+click in zathura VimTeX focuses the terminal with xdotool, but first warps
+			-- the mouse pointer onto it. Same window lookup as VimTeX's xdo_focus_vim, minus the
+			-- `xdotool mousemove`.
+			vim.cmd([[
+				function! DevEnvVimtexFocusVim() dict abort
+					if !executable('xdotool') || !executable('pstree') | return | endif
+					if empty($TMUX)
+						let l:pid = getpid()
+					else
+						let l:tty = trim(vimtex#jobs#capture('tmux display-message -p "#{client_tty}"')[0])
+						let l:pid = str2nr(vimtex#jobs#capture('ps o pid t ' . split(l:tty, '/')[-1])[1])
+					endif
+					let l:pids = split(join(vimtex#jobs#capture('pstree -s -p ' . l:pid)), '\D\+')
+					for l:p in reverse(l:pids[: index(l:pids, string(l:pid))])
+						let l:ids = filter(reverse(vimtex#jobs#capture('xdotool search --onlyvisible --pid ' . l:p)), '!empty(v:val)')
+						if !empty(l:ids)
+							call vimtex#jobs#run('xdotool windowactivate ' . l:ids[0] . ' &')
+							return l:ids[0]
+						endif
+					endfor
+				endfunction
+			]])
+			vim.api.nvim_create_autocmd("User", {
+				pattern = "VimtexEventInitPost",
+				group = vim.api.nvim_create_augroup("DevEnvVimtexFocus", { clear = true }),
+				command = "if exists('b:vimtex.viewer') | let b:vimtex.viewer.xdo_focus_vim = function('DevEnvVimtexFocusVim') | endif",
+			})
+
 			-- Like Overleaf's full TeX Live, without installing it: when a build fails on a missing
 			-- .sty/.cls/.bst/font, install the TeX Live package that provides it and rebuild.
 			local install_missing = vim.fn.stdpath("config") .. "/scripts/tex-install-missing"
