@@ -246,15 +246,19 @@ In Neovim, VimTeX builds with `latexmk` and texlab
 zathura; Ctrl+click in the PDF jumps to the source line, `,lv` jumps the other way. Without
 `xdotool` (Wayland), VimTeX uses `zathura_simple`, which may open a new window per jump.
 
-**SSH server:** there is no viewer on the server, so VimTeX only builds. On the laptop, run
+**SSH server:** there is no viewer on the server. On the laptop (Pop!_OS: `sudo apt install
+zathura rsync`), run
 
 ```bash
 ~/dev-env/scripts/pdf-follow server:path/to/main.pdf
 ```
 
-which copies the PDF with rsync every second into `~/.cache/dev-env/pdf-follow/` and opens it in
-zathura, which reloads on each build. Needs `rsync` on both machines. Clicking in the PDF does not
-jump to the source in this setup.
+It copies the PDF and its SyncTeX file with rsync every second into
+`~/.cache/dev-env/pdf-follow/` and opens zathura, which reloads on each build. SyncTeX works both
+ways over the same SSH connection: Ctrl+click in zathura moves the server's nvim, and `,lv` in the
+server's nvim moves zathura (within a second). Needs `rsync` on both machines and dev-env's nvim at
+`~/.local/bin/nvim` on the server. Don't copy build files (`*.synctex.gz`, `*.fdb_latexmk`, …)
+between machines: SyncTeX records absolute paths, so clicks would point at the other machine.
 
 ## tmux
 

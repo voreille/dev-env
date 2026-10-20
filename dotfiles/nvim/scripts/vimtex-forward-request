@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# VimTeX "viewer" on an SSH server, where there is no PDF viewer: records the forward search
+# (",lv") as a request file. scripts/pdf-follow on the laptop polls it and moves its zathura.
+# Usage (set up in lazy.lua): vimtex-forward-request LINE COL TEX PDF
+set -euo pipefail
+
+dir="${XDG_CACHE_HOME:-$HOME/.cache}/dev-env"
+mkdir -p "$dir"
+printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" >"$dir/vimtex-forward.tmp"
+mv "$dir/vimtex-forward.tmp" "$dir/vimtex-forward"

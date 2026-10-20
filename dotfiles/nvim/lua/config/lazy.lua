@@ -778,8 +778,13 @@ require("lazy").setup({
 				-- Ctrl+click in zathura jumps to the source; ",lv" jumps to the PDF.
 				-- "zathura" reuses the window via xdotool (X11 only); otherwise use zathura_simple.
 				vim.g.vimtex_view_method = vim.fn.executable("xdotool") == 1 and "zathura" or "zathura_simple"
+			elseif vim.env.SSH_CONNECTION then
+				-- On an SSH server the PDF is shown by scripts/pdf-follow on the laptop: ",lv" leaves
+				-- a request it picks up, and its zathura sends Ctrl+click back over ssh.
+				vim.g.vimtex_view_method = "general"
+				vim.g.vimtex_view_general_viewer = vim.fn.stdpath("config") .. "/scripts/vimtex-forward-request"
+				vim.g.vimtex_view_general_options = "@line @col @tex @pdf"
 			else
-				-- No local viewer (e.g. on an SSH server): just build, don't try to open the PDF.
 				vim.g.vimtex_view_enabled = 0
 			end
 

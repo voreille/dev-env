@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 # Run on the laptop: show a PDF that VimTeX builds on an SSH server in a local zathura.
-# The PDF is copied with rsync every few seconds; zathura reloads the local copy when it changes.
-# (zathura on an sshfs mount does not notice changes made on the server.)
+# The PDF and its SyncTeX file are copied with rsync every few seconds; zathura reloads the
+# local copy when it changes. (zathura on an sshfs mount does not notice changes on the server.)
+# SyncTeX works both ways over the same SSH connection:
+#   Ctrl+click in zathura -> ssh runs `nvim --headless -c VimtexInverseSearch` on the server,
+#                            which moves the server's nvim (SyncTeX records server paths).
+#   ,lv in the server nvim -> dotfiles/nvim/scripts/vimtex-forward-request leaves a request in
+#                             ~/.cache/dev-env/vimtex-forward, polled here and passed to zathura.
 set -euo pipefail
 
 if [[ $# -lt 1 || "$1" == -h || "$1" == --help ]]; then
@@ -12,19 +17,41 @@ fi
 remote="$1"
 interval="${2:-1}"
 host="${remote%%:*}"
+remote_pdf="${remote#*:}"
+remote_synctex="${remote_pdf%.pdf}.synctex.gz"
 dir="${XDG_CACHE_HOME:-$HOME/.cache}/dev-env/pdf-follow/$host"
-pdf="$dir/$(basename "${remote#*:}")"
+pdf="$dir/$(basename "$remote_pdf")"
 mkdir -p "$dir"
 
 # Reuse one SSH connection instead of opening a new one every second.
 ssh_cmd="ssh -o ControlMaster=auto -o ControlPath=$dir/ssh-%C -o ControlPersist=60"
 
+# zathura fills in %{line}, %{column} and %{input}; the inner quotes survive for the remote shell.
+inverse="$ssh_cmd $host \"~/.local/bin/nvim --headless -c \\\"VimtexInverseSearch %{line}:%{column} '%{input}'\\\"\""
+
+pull() {
+	# The SyncTeX file may not exist yet (first build still running); that is fine.
+	rsync -tq -e "$ssh_cmd" "$host:$remote_pdf" "$host:$remote_synctex" "$dir/" 2>/dev/null || true
+}
+
+forward() {
+	local request line col tex request_pdf
+	# shellcheck disable=SC2016 # expanded by the remote shell
+	request="$($ssh_cmd "$host" 'f=~/.cache/dev-env/vimtex-forward; if [ -f "$f" ]; then cat "$f"; rm -f "$f"; fi' 2>/dev/null)" || return 0
+	[[ -n "$request" ]] || return 0
+	IFS=$'\t' read -r line col tex request_pdf <<<"$request"
+	[[ "$(basename "$request_pdf")" == "$(basename "$pdf")" ]] || return 0
+	zathura --synctex-forward "$line:$col:$tex" "$pdf" || true
+}
+
 rsync -t -e "$ssh_cmd" "$remote" "$pdf"
-zathura "$pdf" &
+pull
+zathura -x "$inverse" "$pdf" &
 viewer=$!
 trap 'kill "$viewer" 2>/dev/null || true' EXIT
 
 while kill -0 "$viewer" 2>/dev/null; do
 	sleep "$interval"
-	rsync -tq -e "$ssh_cmd" "$remote" "$pdf" || true
+	pull
+	forward
 done
