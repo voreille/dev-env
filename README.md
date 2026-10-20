@@ -295,6 +295,13 @@ Edit the versions you want and run:
 ./bootstrap.sh --force
 ```
 
+Each version installs into its own `~/.local/opt/dev-env/<tool>-<version>` and old ones are kept.
+Delete the ones that are neither pinned nor still linked with:
+
+```bash
+./bootstrap.sh --prune
+```
+
 Neovim plugins are managed by `lazy.nvim`; use `:Lazy` inside Neovim when you want to inspect/update them.
 
 ## Uninstall / rollback

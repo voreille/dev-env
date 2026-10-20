@@ -23,7 +23,8 @@ user-facing doc (workflow, keymaps); this file covers what matters when editing 
 ## Layout
 
 - `bootstrap.sh` → thin wrapper exec'ing `install/bootstrap.sh` (the real installer).
-  Flags: `--force`, `--tools-only`, `--config-only`.
+  Flags: `--force`, `--tools-only`, `--config-only`, `--prune` (delete old version dirs; a new
+  tool's dir name must be added to the `pinned` map in `prune_old_versions`).
 - `config/versions.conf` — pinned tool versions, sourced by both bootstrap and doctor.
 - `scripts/doctor` — checks versions, editor Python tools, host commands, config symlinks.
 - `dotfiles/nvim/` — symlinked to `~/.config/nvim`. `init.lua` → `lua/config/{options,keymaps,lazy}.lua`.

@@ -20,6 +20,7 @@ TOOLS_VENV="$SHARE_DIR/python-tools"
 FORCE=0
 TOOLS=1
 CONFIG=1
+PRUNE=0
 
 usage() {
 	cat <<'USAGE'
@@ -32,6 +33,7 @@ Options:
   --force        reinstall pinned binaries even when the expected version exists
   --tools-only   install binaries/tooling but do not link/supply dotfiles
   --config-only  link/supply dotfiles but do not install binaries
+  --prune        only delete installed versions that are neither pinned nor in use
   -h, --help     show this help
 
 Environment:
@@ -53,6 +55,10 @@ while [[ $# -gt 0 ]]; do
 		TOOLS=0
 		shift
 		;;
+	--prune)
+		PRUNE=1
+		shift
+		;;
 	-h | --help)
 		usage
 		exit 0
@@ -66,6 +72,45 @@ while [[ $# -gt 0 ]]; do
 done
 
 mkdir -p "$BIN_DIR" "$OPT_DIR" "$SHARE_DIR" "$STATE_DIR" "$CONFIG_HOME"
+
+# Installs never delete the previous version (a running nvim keeps its files during an
+# upgrade), so old $OPT_DIR/<tool>-<version> dirs pile up until --prune. A dir is kept when its
+# version is pinned or a symlink still points into it (pin bumped but bootstrap not re-run yet).
+prune_old_versions() {
+	local -A pinned=(
+		[nvim]="$NVIM_VERSION"
+		[yazi]="$YAZI_VERSION"
+		[lazygit]="$LAZYGIT_VERSION"
+		[ripgrep]="$RIPGREP_VERSION"
+		[fd]="$FD_VERSION"
+		[fzf]="$FZF_VERSION"
+		[tree-sitter]="$TREE_SITTER_VERSION"
+		[imagemagick]="$IMAGEMAGICK_VERSION"
+		[tinytex]="$TINYTEX_VERSION"
+	)
+	local link in_use=() tool dir used removed=0
+	for link in "$BIN_DIR"/* "$OPT_DIR/tinytex"; do
+		[[ -L "$link" ]] && in_use+=("$(readlink -f "$link")")
+	done
+
+	for tool in "${!pinned[@]}"; do
+		for dir in "$OPT_DIR/$tool"-*; do
+			[[ -d "$dir" && ! -L "$dir" && "$dir" != "$OPT_DIR/$tool-${pinned[$tool]}" ]] || continue
+			for used in ${in_use[@]+"${in_use[@]}"}; do
+				[[ "$used" == "$dir" || "$used" == "$dir"/* ]] && continue 2
+			done
+			echo "Removing $dir ($(du -sh "$dir" | cut -f1))"
+			rm -rf "$dir"
+			removed=1
+		done
+	done
+	[[ "$removed" == 1 ]] || echo "No old versions to remove"
+}
+
+if [[ "$PRUNE" == 1 ]]; then
+	prune_old_versions
+	exit 0
+fi
 export PATH="$BIN_DIR:$PATH"
 
 TMP="$(mktemp -d -t dev-env-bootstrap.XXXXXX)"
