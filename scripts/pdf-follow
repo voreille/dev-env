@@ -3,31 +3,66 @@
 # The PDF and its SyncTeX file are copied with rsync every few seconds; zathura reloads the
 # local copy when it changes. (zathura on an sshfs mount does not notice changes on the server.)
 # SyncTeX works both ways over the same SSH connection:
-#   Ctrl+click in zathura -> ssh runs `nvim --headless -c VimtexInverseSearch` on the server,
-#                            which moves the server's nvim (SyncTeX records server paths).
+#   Ctrl+click in zathura -> `pdf-follow --inverse` runs `nvim --headless -c VimtexInverseSearch`
+#                            on the server (SyncTeX records server paths), then focuses the
+#                            local terminal window that runs ssh to the server.
 #   ,lv in the server nvim -> dotfiles/nvim/scripts/vimtex-forward-request leaves a request in
 #                             ~/.cache/dev-env/vimtex-forward, polled here and passed to zathura.
 set -euo pipefail
 
-if [[ $# -lt 1 || "$1" == -h || "$1" == --help ]]; then
+usage() {
 	echo "Usage: $(basename "$0") host:path/to/main.pdf [seconds]" >&2
 	exit 2
+}
+
+inverse=0
+if [[ "${1:-}" == --inverse ]]; then
+	# Called by zathura: --inverse HOST LINE COLUMN INPUT
+	[[ $# -eq 5 ]] || usage
+	inverse=1
+	host="$2"
+else
+	[[ $# -ge 1 && "$1" != -h && "$1" != --help ]] || usage
+	host="${1%%:*}"
+fi
+
+dir="${XDG_CACHE_HOME:-$HOME/.cache}/dev-env/pdf-follow/$host"
+mkdir -p "$dir"
+# Reuse one SSH connection instead of opening a new one every second.
+ssh_cmd="ssh -o ControlMaster=auto -o ControlPath=$dir/ssh-%C -o ControlPersist=60"
+
+# Activate the terminal window of the interactive `ssh`/`kitten ssh` to $host (ours carry $dir
+# in their arguments and are skipped), like VimTeX's xdo_focus_vim but without moving the mouse.
+focus_ssh_window() {
+	command -v xdotool >/dev/null || return 0
+	local pid win
+	pid="$(ps -eo pid=,args= | awk -v host="$host" -v skip="$dir" '
+		index($0, skip) == 0 && $2 ~ /(^|\/)(ssh|kitten)$/ {
+			for (i = 3; i <= NF; i++) if ($i == host) { print $1; exit }
+		}')"
+	while [[ -n "$pid" && "$pid" -gt 1 ]]; do
+		win="$(xdotool search --onlyvisible --pid "$pid" 2>/dev/null | tail -n1 || true)"
+		if [[ -n "$win" ]]; then
+			xdotool windowactivate "$win" 2>/dev/null || true
+			return 0
+		fi
+		pid="$(ps -o ppid= -p "$pid" | tr -d ' ')"
+	done
+}
+
+if [[ "$inverse" == 1 ]]; then
+	line="$3" col="$4" input="$5"
+	# shellcheck disable=SC2088 # ~ is expanded by the remote shell
+	$ssh_cmd "$host" "~/.local/bin/nvim --headless -c \"VimtexInverseSearch $line:$col '$input'\"" || true
+	focus_ssh_window
+	exit 0
 fi
 
 remote="$1"
 interval="${2:-1}"
-host="${remote%%:*}"
 remote_pdf="${remote#*:}"
 remote_synctex="${remote_pdf%.pdf}.synctex.gz"
-dir="${XDG_CACHE_HOME:-$HOME/.cache}/dev-env/pdf-follow/$host"
 pdf="$dir/$(basename "$remote_pdf")"
-mkdir -p "$dir"
-
-# Reuse one SSH connection instead of opening a new one every second.
-ssh_cmd="ssh -o ControlMaster=auto -o ControlPath=$dir/ssh-%C -o ControlPersist=60"
-
-# zathura fills in %{line}, %{column} and %{input}; the inner quotes survive for the remote shell.
-inverse="$ssh_cmd $host \"~/.local/bin/nvim --headless -c \\\"VimtexInverseSearch %{line}:%{column} '%{input}'\\\"\""
 
 pull() {
 	# The SyncTeX file may not exist yet (first build still running); that is fine.
@@ -46,7 +81,8 @@ forward() {
 
 rsync -t -e "$ssh_cmd" "$remote" "$pdf"
 pull
-zathura -x "$inverse" "$pdf" &
+# zathura fills in %{line}, %{column} and %{input} after splitting this into arguments.
+zathura -x "$(readlink -f "$0") --inverse $host %{line} %{column} %{input}" "$pdf" &
 viewer=$!
 trap 'kill "$viewer" 2>/dev/null || true' EXIT
 
