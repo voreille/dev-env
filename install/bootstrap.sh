@@ -443,6 +443,7 @@ configure_dotfiles() {
 	ln -sfn "$ROOT/dotfiles/bash/bashrc" "$CONFIG_HOME/dev-env/bashrc"
 	ln -sfn "$ROOT/dotfiles/tmux/tmux.conf" "$CONFIG_HOME/dev-env/tmux.conf"
 
+	# shellcheck disable=SC2016 # $HOME must stay literal in ~/.bashrc
 	ensure_block "$HOME/.bashrc" \
 		'# >>> dev-env >>>' '# <<< dev-env <<<' \
 		'[[ -f "$HOME/.config/dev-env/bashrc" ]] && source "$HOME/.config/dev-env/bashrc"'
