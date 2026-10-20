@@ -1,3 +1,4 @@
+-- ── lazy.nvim bootstrap ──────────────────────────────────────────────────────
 local lazypath = vim.fn.stdpath("data") .. "/lazy/lazy.nvim"
 if not vim.uv.fs_stat(lazypath) then
 	local out = vim.fn.system({
@@ -14,6 +15,7 @@ if not vim.uv.fs_stat(lazypath) then
 end
 vim.opt.rtp:prepend(lazypath)
 
+-- ── Paths and Python interpreter helpers ─────────────────────────────────────
 local dev_prefix = vim.env.DEV_ENV_PREFIX or vim.fn.expand("~/.local")
 local python_tools = dev_prefix .. "/share/dev-env/python-tools/bin/python"
 
@@ -96,6 +98,7 @@ local function add_remote_python_targets(dap)
 end
 
 require("lazy").setup({
+	-- ── Editor UI ───────────────────────────────────────────────────────────
 	{
 		"folke/which-key.nvim",
 		event = "VeryLazy",
@@ -112,7 +115,189 @@ require("lazy").setup({
 			},
 		},
 	},
+	{
+		"Mofiqul/dracula.nvim",
+		priority = 1000,
+		config = function()
+			vim.cmd.colorscheme("dracula")
 
+			local highlights = {
+				Function = { fg = "#50fa7b" },
+				["@function"] = { fg = "#50fa7b" },
+				["@function.call"] = { fg = "#50fa7b" },
+				["@function.method"] = { fg = "#50fa7b" },
+				["@function.method.call"] = { fg = "#50fa7b" },
+				["@lsp.type.function.python"] = { fg = "#50fa7b" },
+				["@lsp.type.method.python"] = { fg = "#50fa7b" },
+
+				["@variable.parameter"] = {
+					fg = "#ffb86c",
+					italic = true,
+				},
+				["@lsp.type.parameter.python"] = {
+					fg = "#ffb86c",
+					italic = true,
+				},
+
+				["@type"] = { fg = "#8be9fd" },
+				["@type.builtin"] = { fg = "#8be9fd" },
+				["@type.definition"] = { fg = "#8be9fd" },
+				["@constructor"] = { fg = "#8be9fd" },
+				["@lsp.type.class.python"] = { fg = "#8be9fd" },
+
+				["@variable.builtin"] = {
+					fg = "#bd93f9",
+					italic = true,
+				},
+				["@variable.member"] = { fg = "#8be9fd" },
+				["@property"] = { fg = "#8be9fd" },
+
+				-- Floating completion and signature windows.
+				DevPopup = {
+					fg = "#f8f8f2",
+					bg = "#343746",
+				},
+				DevPopupBorder = {
+					fg = "#bd93f9",
+					bg = "#343746",
+				},
+				DevPopupSelection = {
+					fg = "#f8f8f2",
+					bg = "#44475a",
+					bold = true,
+				},
+				TreesitterContext = {
+					bg = "#343746",
+				},
+				TreesitterContextLineNumber = {
+					fg = "#6272a4",
+					bg = "#343746",
+				},
+				TreesitterContextBottom = {
+					underline = true,
+					sp = "#6272a4",
+				},
+				TreesitterContextLineNumberBottom = {
+					underline = true,
+					sp = "#6272a4",
+				},
+			}
+
+			for group, opts in pairs(highlights) do
+				vim.api.nvim_set_hl(0, group, opts)
+			end
+		end,
+	},
+	{
+		-- Images in Kitty/Ghostty/WezTerm; detected at runtime, so a no-op in Alacritty.
+		"folke/snacks.nvim",
+		lazy = false,
+		priority = 1000,
+		opts = {
+			image = {
+				enabled = true,
+				-- Math stays with render-markdown's Unicode converter for now.
+				math = { enabled = false },
+			},
+		},
+		init = function()
+			-- Back to a hidden image buffer (<C-^>, :b) snacks re-sends the old placement, which
+			-- Kitty over SSH leaves blank; re-attach like :e does (new placement, no data re-sent).
+			local group = vim.api.nvim_create_augroup("DevEnvImageReattach", { clear = true })
+			vim.api.nvim_create_autocmd("BufWinLeave", {
+				group = group,
+				callback = function(args)
+					if vim.bo[args.buf].filetype == "image" then
+						vim.b[args.buf].dev_env_image_hidden = true
+					end
+				end,
+			})
+			vim.api.nvim_create_autocmd("BufWinEnter", {
+				group = group,
+				callback = function(args)
+					if vim.b[args.buf].dev_env_image_hidden then
+						vim.b[args.buf].dev_env_image_hidden = nil
+						Snacks.image.buf.attach(args.buf)
+					end
+				end,
+			})
+		end,
+	},
+	{
+		"stevearc/aerial.nvim",
+		opts = {
+			highlight_on_hover = true,
+
+			-- Full outline: AerialToggle float
+			keymaps = {
+				["<Esc>"] = "actions.close",
+			},
+
+			-- Compact navigator: AerialNavToggle
+			nav = {
+				keymaps = {
+					["<Esc>"] = "actions.close",
+					["q"] = "actions.close",
+				},
+			},
+		},
+		keys = {
+			{
+				"<leader>o",
+				"<cmd>AerialToggle float<CR>",
+				desc = "Document outline",
+			},
+		},
+	},
+	{
+		"nvim-neo-tree/neo-tree.nvim",
+		branch = "v3.x",
+		dependencies = {
+			"nvim-lua/plenary.nvim",
+			"MunifTanjim/nui.nvim",
+			"nvim-tree/nvim-web-devicons",
+		},
+		opts = {
+			filesystem = {
+				follow_current_file = { enabled = true },
+				use_libuv_file_watcher = true,
+			},
+			window = {
+				position = "left",
+				width = 34,
+				mappings = {
+					["l"] = "open",
+					["h"] = "close_node",
+					["Y"] = function(state)
+						local node = state.tree:get_node()
+						local path = node:get_id()
+
+						-- Yank to both Neovim and the system clipboard.
+						vim.fn.setreg('"', path)
+						vim.fn.setreg("+", path)
+
+						vim.notify("Yanked: " .. path)
+					end,
+				},
+			},
+		},
+		keys = {
+			{ "<leader>e", "<cmd>Neotree toggle filesystem reveal left<CR>", desc = "Explorer" },
+		},
+	},
+	{
+		"stevearc/oil.nvim",
+		opts = {
+			default_file_explorer = true,
+			view_options = { show_hidden = false },
+		},
+		keys = {
+			{ "-", "<cmd>Oil<CR>", desc = "Parent directory" },
+			{ "<leader>fo", "<cmd>Oil<CR>", desc = "Oil" },
+		},
+	},
+
+	-- ── Search ──────────────────────────────────────────────────────────────
 	{
 		"ibhagwan/fzf-lua",
 		dependencies = { "nvim-tree/nvim-web-devicons" },
@@ -194,91 +379,7 @@ require("lazy").setup({
 		},
 	},
 
-	{
-		"stevearc/oil.nvim",
-		opts = {
-			default_file_explorer = true,
-			view_options = { show_hidden = false },
-		},
-		keys = {
-			{ "-", "<cmd>Oil<CR>", desc = "Parent directory" },
-			{ "<leader>fo", "<cmd>Oil<CR>", desc = "Oil" },
-		},
-	},
-	{
-		"Mofiqul/dracula.nvim",
-		priority = 1000,
-		config = function()
-			vim.cmd.colorscheme("dracula")
-
-			local highlights = {
-				Function = { fg = "#50fa7b" },
-				["@function"] = { fg = "#50fa7b" },
-				["@function.call"] = { fg = "#50fa7b" },
-				["@function.method"] = { fg = "#50fa7b" },
-				["@function.method.call"] = { fg = "#50fa7b" },
-				["@lsp.type.function.python"] = { fg = "#50fa7b" },
-				["@lsp.type.method.python"] = { fg = "#50fa7b" },
-
-				["@variable.parameter"] = {
-					fg = "#ffb86c",
-					italic = true,
-				},
-				["@lsp.type.parameter.python"] = {
-					fg = "#ffb86c",
-					italic = true,
-				},
-
-				["@type"] = { fg = "#8be9fd" },
-				["@type.builtin"] = { fg = "#8be9fd" },
-				["@type.definition"] = { fg = "#8be9fd" },
-				["@constructor"] = { fg = "#8be9fd" },
-				["@lsp.type.class.python"] = { fg = "#8be9fd" },
-
-				["@variable.builtin"] = {
-					fg = "#bd93f9",
-					italic = true,
-				},
-				["@variable.member"] = { fg = "#8be9fd" },
-				["@property"] = { fg = "#8be9fd" },
-
-				-- Floating completion and signature windows.
-				DevPopup = {
-					fg = "#f8f8f2",
-					bg = "#343746",
-				},
-				DevPopupBorder = {
-					fg = "#bd93f9",
-					bg = "#343746",
-				},
-				DevPopupSelection = {
-					fg = "#f8f8f2",
-					bg = "#44475a",
-					bold = true,
-				},
-				TreesitterContext = {
-					bg = "#343746",
-				},
-				TreesitterContextLineNumber = {
-					fg = "#6272a4",
-					bg = "#343746",
-				},
-				TreesitterContextBottom = {
-					underline = true,
-					sp = "#6272a4",
-				},
-				TreesitterContextLineNumberBottom = {
-					underline = true,
-					sp = "#6272a4",
-				},
-			}
-
-			for group, opts in pairs(highlights) do
-				vim.api.nvim_set_hl(0, group, opts)
-			end
-		end,
-	},
-
+	-- ── Git ─────────────────────────────────────────────────────────────────
 	{
 		"lewis6991/gitsigns.nvim",
 		event = { "BufReadPre", "BufNewFile" },
@@ -382,6 +483,71 @@ require("lazy").setup({
 			{ "<leader>gq", "<cmd>DiffviewClose<CR>", desc = "Git close diffview" },
 		},
 	},
+
+	-- ── LSP, completion, formatting ─────────────────────────────────────────
+	{
+		"mason-org/mason.nvim",
+		opts = {
+			-- Prefer bootstrap-managed binaries over Mason shims.
+			PATH = "append",
+		},
+	},
+	{
+		"WhoIsSethDaniel/mason-tool-installer.nvim",
+		dependencies = { "mason-org/mason.nvim" },
+		opts = {
+			ensure_installed = {
+				"stylua",
+				"yamlfmt",
+				"google-java-format",
+				"shfmt",
+				"texlab",
+			},
+		},
+	},
+	{
+		"neovim/nvim-lspconfig",
+		dependencies = { "saghen/blink.cmp" },
+		config = function()
+			local capabilities = require("blink.cmp").get_lsp_capabilities()
+
+			vim.lsp.config("pyright", {
+				capabilities = capabilities,
+				before_init = function(_, config)
+					config.settings.python.pythonPath = project_python()
+				end,
+				settings = {
+					python = {
+						pythonPath = project_python(),
+						analysis = {
+							autoSearchPaths = true,
+							useLibraryCodeForTypes = true,
+							typeCheckingMode = "standard",
+						},
+					},
+				},
+			})
+			vim.lsp.config("ruff", { capabilities = capabilities })
+			-- Completion/diagnostics only; VimTeX does the building.
+			vim.lsp.config("texlab", { capabilities = capabilities })
+			vim.lsp.enable({ "pyright", "ruff", "texlab" })
+
+			vim.api.nvim_create_autocmd("LspAttach", {
+				group = vim.api.nvim_create_augroup("DevEnvLspMaps", { clear = true }),
+				callback = function(args)
+					local function lsp_map(lhs, rhs, desc)
+						vim.keymap.set("n", lhs, rhs, { buffer = args.buf, desc = desc })
+					end
+					lsp_map("gd", vim.lsp.buf.definition, "Go to definition")
+					lsp_map("gD", vim.lsp.buf.declaration, "Go to declaration")
+					lsp_map("gr", vim.lsp.buf.references, "References")
+					lsp_map("K", vim.lsp.buf.hover, "Hover")
+					lsp_map("<leader>rn", vim.lsp.buf.rename, "Rename")
+					lsp_map("<leader>ca", vim.lsp.buf.code_action, "Code action")
+				end,
+			})
+		end,
+	},
 	{
 		"saghen/blink.cmp",
 		version = "1.*",
@@ -437,49 +603,34 @@ require("lazy").setup({
 		},
 	},
 	{
-		"neovim/nvim-lspconfig",
-		dependencies = { "saghen/blink.cmp" },
-		config = function()
-			local capabilities = require("blink.cmp").get_lsp_capabilities()
-
-			vim.lsp.config("pyright", {
-				capabilities = capabilities,
-				before_init = function(_, config)
-					config.settings.python.pythonPath = project_python()
+		"stevearc/conform.nvim",
+		opts = {
+			formatters_by_ft = {
+				python = { "ruff_organize_imports", "ruff_format" },
+				lua = { "stylua" },
+				yaml = { "yamlfmt" },
+				java = { "google-java-format" },
+				sh = { "shfmt" },
+				bash = { "shfmt" },
+			},
+			format_on_save = function(bufnr)
+				if vim.bo[bufnr].filetype == "python" then
+					return { timeout_ms = 3000, lsp_format = "fallback" }
+				end
+			end,
+		},
+		keys = {
+			{
+				"<leader>lf",
+				function()
+					require("conform").format({ async = true, lsp_format = "fallback" })
 				end,
-				settings = {
-					python = {
-						pythonPath = project_python(),
-						analysis = {
-							autoSearchPaths = true,
-							useLibraryCodeForTypes = true,
-							typeCheckingMode = "standard",
-						},
-					},
-				},
-			})
-			vim.lsp.config("ruff", { capabilities = capabilities })
-			-- Completion/diagnostics only; VimTeX does the building.
-			vim.lsp.config("texlab", { capabilities = capabilities })
-			vim.lsp.enable({ "pyright", "ruff", "texlab" })
-
-			vim.api.nvim_create_autocmd("LspAttach", {
-				group = vim.api.nvim_create_augroup("DevEnvLspMaps", { clear = true }),
-				callback = function(args)
-					local function lsp_map(lhs, rhs, desc)
-						vim.keymap.set("n", lhs, rhs, { buffer = args.buf, desc = desc })
-					end
-					lsp_map("gd", vim.lsp.buf.definition, "Go to definition")
-					lsp_map("gD", vim.lsp.buf.declaration, "Go to declaration")
-					lsp_map("gr", vim.lsp.buf.references, "References")
-					lsp_map("K", vim.lsp.buf.hover, "Hover")
-					lsp_map("<leader>rn", vim.lsp.buf.rename, "Rename")
-					lsp_map("<leader>ca", vim.lsp.buf.code_action, "Code action")
-				end,
-			})
-		end,
+				desc = "Format file",
+			},
+		},
 	},
 
+	-- ── Debugging ───────────────────────────────────────────────────────────
 	{
 		"mfussenegger/nvim-dap",
 		dependencies = {
@@ -609,107 +760,7 @@ require("lazy").setup({
 		end,
 	},
 
-	{
-		"nvim-neo-tree/neo-tree.nvim",
-		branch = "v3.x",
-		dependencies = {
-			"nvim-lua/plenary.nvim",
-			"MunifTanjim/nui.nvim",
-			"nvim-tree/nvim-web-devicons",
-		},
-		opts = {
-			filesystem = {
-				follow_current_file = { enabled = true },
-				use_libuv_file_watcher = true,
-			},
-			window = {
-				position = "left",
-				width = 34,
-				mappings = {
-					["l"] = "open",
-					["h"] = "close_node",
-					["Y"] = function(state)
-						local node = state.tree:get_node()
-						local path = node:get_id()
-
-						-- Yank to both Neovim and the system clipboard.
-						vim.fn.setreg('"', path)
-						vim.fn.setreg("+", path)
-
-						vim.notify("Yanked: " .. path)
-					end,
-				},
-			},
-		},
-		keys = {
-			{ "<leader>e", "<cmd>Neotree toggle filesystem reveal left<CR>", desc = "Explorer" },
-		},
-	},
-
-	{
-		"stevearc/conform.nvim",
-		opts = {
-			formatters_by_ft = {
-				python = { "ruff_organize_imports", "ruff_format" },
-				lua = { "stylua" },
-				yaml = { "yamlfmt" },
-				java = { "google-java-format" },
-				sh = { "shfmt" },
-				bash = { "shfmt" },
-			},
-			format_on_save = function(bufnr)
-				if vim.bo[bufnr].filetype == "python" then
-					return { timeout_ms = 3000, lsp_format = "fallback" }
-				end
-			end,
-		},
-		keys = {
-			{
-				"<leader>lf",
-				function()
-					require("conform").format({ async = true, lsp_format = "fallback" })
-				end,
-				desc = "Format file",
-			},
-		},
-	},
-
-	{
-		"hat0uma/csvview.nvim",
-		cmd = { "CsvViewEnable", "CsvViewDisable", "CsvViewToggle" },
-		opts = {
-			parser = { comments = { "#", "//" } },
-			keymaps = {
-				textobject_field_inner = { "if", mode = { "o", "x" } },
-				textobject_field_outer = { "af", mode = { "o", "x" } },
-				jump_next_field_end = { "<Tab>", mode = { "n", "v" } },
-				jump_prev_field_end = { "<S-Tab>", mode = { "n", "v" } },
-			},
-		},
-	},
-
-	{
-		"mason-org/mason.nvim",
-		opts = {
-			-- Prefer bootstrap-managed binaries over Mason shims.
-			PATH = "append",
-		},
-	},
-
-	{
-		"WhoIsSethDaniel/mason-tool-installer.nvim",
-		dependencies = { "mason-org/mason.nvim" },
-		opts = {
-			ensure_installed = {
-				"stylua",
-				"yamlfmt",
-				"google-java-format",
-				"shfmt",
-				"texlab",
-			},
-		},
-	},
-
+	-- ── Treesitter ──────────────────────────────────────────────────────────
 	{
 		"nvim-treesitter/nvim-treesitter",
 		branch = "main",
@@ -750,22 +801,17 @@ require("lazy").setup({
 		end,
 	},
 	{
-		"MeanderingProgrammer/render-markdown.nvim",
-		ft = { "markdown" },
+		"nvim-treesitter/nvim-treesitter-context",
 		dependencies = {
 			"nvim-treesitter/nvim-treesitter",
-			"nvim-tree/nvim-web-devicons",
 		},
 		opts = {
-			-- Math is shown as one-line Unicode (x^2 -> x²) by our pylatexenc wrapper.
-			latex = {
-				converter = vim.fn.stdpath("config") .. "/scripts/tex2unicode",
-				position = "center",
-			},
-			-- No raw HTML in notes; also avoids needing the html parser.
-			html = { enabled = false },
+			max_lines = 3,
+			mode = "cursor",
 		},
 	},
+
+	-- ── Languages and filetypes ─────────────────────────────────────────────
 	{
 		-- LaTeX: continuous latexmk build on save (TinyTeX from bootstrap), errors in quickfix,
 		-- TeX motions/text objects. Maps live under <localleader>l (",ll" build, ",lv" view).
@@ -866,68 +912,32 @@ require("lazy").setup({
 		end,
 	},
 	{
-		-- Images in Kitty/Ghostty/WezTerm; detected at runtime, so a no-op in Alacritty.
-		"folke/snacks.nvim",
-		lazy = false,
-		priority = 1000,
-		opts = {
-			image = {
-				enabled = true,
-				-- Math stays with render-markdown's Unicode converter for now.
-				math = { enabled = false },
-			},
+		"MeanderingProgrammer/render-markdown.nvim",
+		ft = { "markdown" },
+		dependencies = {
+			"nvim-treesitter/nvim-treesitter",
+			"nvim-tree/nvim-web-devicons",
 		},
-		init = function()
-			-- Back to a hidden image buffer (<C-^>, :b) snacks re-sends the old placement, which
-			-- Kitty over SSH leaves blank; re-attach like :e does (new placement, no data re-sent).
-			local group = vim.api.nvim_create_augroup("DevEnvImageReattach", { clear = true })
-			vim.api.nvim_create_autocmd("BufWinLeave", {
-				group = group,
-				callback = function(args)
-					if vim.bo[args.buf].filetype == "image" then
-						vim.b[args.buf].dev_env_image_hidden = true
-					end
-				end,
-			})
-			vim.api.nvim_create_autocmd("BufWinEnter", {
-				group = group,
-				callback = function(args)
-					if vim.b[args.buf].dev_env_image_hidden then
-						vim.b[args.buf].dev_env_image_hidden = nil
-						Snacks.image.buf.attach(args.buf)
-					end
-				end,
-			})
-		end,
-	},
-	{
-		"github/copilot.vim",
-		event = "InsertEnter",
-	},
-
-	{
-		"stevearc/aerial.nvim",
 		opts = {
-			highlight_on_hover = true,
-
-			-- Full outline: AerialToggle float
+			-- Math is shown as one-line Unicode (x^2 -> x²) by our pylatexenc wrapper.
+			latex = {
+				converter = vim.fn.stdpath("config") .. "/scripts/tex2unicode",
+				position = "center",
+			},
+			-- No raw HTML in notes; also avoids needing the html parser.
+			html = { enabled = false },
+		},
+	},
+	{
+		"hat0uma/csvview.nvim",
+		cmd = { "CsvViewEnable", "CsvViewDisable", "CsvViewToggle" },
+		opts = {
+			parser = { comments = { "#", "//" } },
 			keymaps = {
-				["<Esc>"] = "actions.close",
-			},
-
-			-- Compact navigator: AerialNavToggle
-			nav = {
-				keymaps = {
-					["<Esc>"] = "actions.close",
-					["q"] = "actions.close",
-				},
-			},
-		},
-		keys = {
-			{
-				"<leader>o",
-				"<cmd>AerialToggle float<CR>",
-				desc = "Document outline",
+				textobject_field_inner = { "if", mode = { "o", "x" } },
+				textobject_field_outer = { "af", mode = { "o", "x" } },
+				jump_next_field_end = { "<Tab>", mode = { "n", "v" } },
+				jump_prev_field_end = { "<S-Tab>", mode = { "n", "v" } },
 			},
 		},
 	},
@@ -986,25 +996,11 @@ require("lazy").setup({
 			},
 		},
 	},
+
+	-- ── AI ──────────────────────────────────────────────────────────────────
 	{
-		"nvim-treesitter/nvim-treesitter-context",
-		dependencies = {
-			"nvim-treesitter/nvim-treesitter",
-		},
-		opts = {
-			max_lines = 3,
-			mode = "cursor",
-		},
-	},
-	{
-		"nvim-treesitter/nvim-treesitter-context",
-		dependencies = {
-			"nvim-treesitter/nvim-treesitter",
-		},
-		opts = {
-			max_lines = 3,
-			mode = "cursor",
-		},
+		"github/copilot.vim",
+		event = "InsertEnter",
 	},
 }, {
 	checker = { enabled = false },
