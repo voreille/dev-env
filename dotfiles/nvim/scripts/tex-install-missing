@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# Install the TeX Live packages that a failed LaTeX build could not find, like TinyTeX does in R.
+# Usage: tex-install-missing document.log [document.blg ...]
+# Exit 0 when packages were installed (rebuild), 1 when there was nothing to install.
+# Called by VimTeX on a failed build (see lazy.lua); also works by hand.
+set -euo pipefail
+
+if [[ $# -eq 0 ]]; then
+	echo "Usage: tex-install-missing document.log [document.blg ...]" >&2
+	exit 2
+fi
+logs=("$@")
+
+# TinyTeX from bootstrap, even when this shell predates the bashrc PATH entry.
+for tex_bin in "${DEV_ENV_PREFIX:-$HOME/.local}"/opt/dev-env/tinytex/bin/*; do
+	[[ -x "$tex_bin/tlmgr" ]] && PATH="$tex_bin:$PATH"
+done
+if ! command -v tlmgr >/dev/null; then
+	echo "tlmgr not found: install TinyTeX with ~/dev-env/bootstrap.sh --tools-only" >&2
+	exit 2
+fi
+
+# Missing files as reported by LaTeX, BibTeX and font loading.
+missing_files() {
+	# grep exits 1 when a pattern has no match; that must not end the function under pipefail.
+	{ grep -hsoE "File \`[^']+' not found" "${logs[@]}" || true; } | sed -E "s/^File \`(.+)' not found$/\1/"
+	{ grep -hsoE "I couldn't open style file [^ ]+" "${logs[@]}" || true; } | sed -E 's/.* //'
+	{ grep -hsoE 'Font \\[^=]+=[^ ]+ .*Metric \(TFM\) file not found' "${logs[@]}" || true; } |
+		sed -E 's/^Font \\[^=]+=([^ ]+) .*/\1.tfm/'
+}
+
+# The package that ships a file whose path ends in /<file>. Copies under doc/ or source/ are
+# skipped: TeX never searches there (e.g. feupphdteses ships a stray IEEEtranN.bst in doc/).
+package_for() {
+	tlmgr search --global --file "/$1" </dev/null 2>/dev/null |
+		awk -v want="/$1" '
+			/^[^ \t].*:$/ { pkg = substr($0, 1, length($0) - 1); next }
+			$1 ~ /^texmf-dist\/(doc|source)\// { next }
+			substr($1, length($1) - length(want) + 1) == want { print pkg; exit }
+		'
+}
+
+installed="$(tlmgr info --only-installed --data name)"
+packages=()
+while IFS= read -r file; do
+	pkg="$(package_for "$file")"
+	if [[ -z "$pkg" ]]; then
+		echo "No TeX Live package provides $file" >&2
+	elif ! grep -qx "$pkg" <<<"$installed" && [[ " ${packages[*]} " != *" $pkg "* ]]; then
+		packages+=("$pkg")
+	fi
+done < <(missing_files | sort -u)
+
+if [[ ${#packages[@]} -eq 0 ]]; then
+	exit 1
+fi
+echo "Installing TeX packages: ${packages[*]}"
+tlmgr install "${packages[@]}"

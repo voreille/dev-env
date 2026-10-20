@@ -5,6 +5,11 @@ case $- in
   *) return ;;
 esac
 
+# TinyTeX from bootstrap; its bin dir must be on PATH itself (tlmgr breaks through symlinks).
+for _tex_bin in "$HOME"/.local/opt/dev-env/tinytex/bin/*; do
+  [[ -d "$_tex_bin" ]] && export PATH="$_tex_bin:$PATH"
+done
+unset _tex_bin
 export PATH="$HOME/.local/bin:$PATH"
 export EDITOR=nvim
 export VISUAL=nvim

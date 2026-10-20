@@ -95,6 +95,8 @@ x86_64 | amd64)
 	FD_ARCH="x86_64"
 	FZF_ARCH="amd64"
 	CONDA_SUBDIR="linux-64"
+	TINYTEX_ARCH="x86_64"
+	TEX_ARCH="x86_64-linux"
 	RUSTUP_TRIPLE="x86_64-unknown-linux-gnu"
 	;;
 aarch64 | arm64)
@@ -105,6 +107,8 @@ aarch64 | arm64)
 	FD_ARCH="aarch64"
 	FZF_ARCH="arm64"
 	CONDA_SUBDIR="linux-aarch64"
+	TINYTEX_ARCH="arm64"
+	TEX_ARCH="aarch64-linux"
 	RUSTUP_TRIPLE="aarch64-unknown-linux-gnu"
 	;;
 *)
@@ -306,6 +310,45 @@ install_imagemagick() {
 	ln -sfn "$dst/bin/magick" "$BIN_DIR/magick"
 }
 
+# Extra packages on top of TinyTeX-1 (snacks.image math previews).
+TEX_PACKAGES=(standalone preview mathtools)
+
+install_tinytex() {
+	local dst="$OPT_DIR/tinytex-$TINYTEX_VERSION"
+	local tlmgr="$dst/bin/$TEX_ARCH/tlmgr"
+
+	# tlmgr is a Perl script, and it must run from its own bin dir: through a symlink it cannot
+	# find mktexlsr. That is why the bin dir goes on PATH (dotfiles/bash/bashrc) instead of
+	# being linked into $BIN_DIR.
+	need perl
+
+	if [[ "$FORCE" == 0 && -x "$dst/bin/$TEX_ARCH/pdflatex" ]]; then
+		echo "TinyTeX $TINYTEX_VERSION already installed"
+	else
+		echo "Installing TinyTeX $TINYTEX_VERSION"
+		rm -rf "$dst" "$TMP/tinytex"
+		mkdir -p "$TMP/tinytex"
+		download \
+			"https://github.com/rstudio/tinytex-releases/releases/download/v${TINYTEX_VERSION}/TinyTeX-1-linux-${TINYTEX_ARCH}-v${TINYTEX_VERSION}.tar.xz" \
+			"$TMP/tinytex.tar.xz"
+		tar -xJf "$TMP/tinytex.tar.xz" -C "$TMP/tinytex"
+		mv "$TMP/tinytex/.TinyTeX" "$dst"
+		# The bundle is older than the package repo, which refuses an outdated tlmgr.
+		"$tlmgr" update --self
+	fi
+	ln -sfn "$dst" "$OPT_DIR/tinytex"
+
+	local installed pkg missing=()
+	installed="$("$tlmgr" info --only-installed --data name)"
+	for pkg in "${TEX_PACKAGES[@]}"; do
+		grep -qx "$pkg" <<<"$installed" || missing+=("$pkg")
+	done
+	if [[ ${#missing[@]} -gt 0 ]]; then
+		echo "Installing TeX packages: ${missing[*]}"
+		"$tlmgr" install "${missing[@]}"
+	fi
+}
+
 install_python_tools() {
 	echo "Installing editor Python tooling using host python3"
 	"$BIN_DIR/uv" venv --python "$(command -v python3)" --clear "$TOOLS_VENV"
@@ -374,6 +417,7 @@ if [[ "$TOOLS" == 1 ]]; then
 	install_uv
 	install_tree_sitter
 	install_imagemagick
+	install_tinytex
 	install_python_tools
 fi
 

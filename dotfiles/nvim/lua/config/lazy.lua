@@ -17,6 +17,13 @@ vim.opt.rtp:prepend(lazypath)
 local dev_prefix = vim.env.DEV_ENV_PREFIX or vim.fn.expand("~/.local")
 local python_tools = dev_prefix .. "/share/dev-env/python-tools/bin/python"
 
+-- TinyTeX from bootstrap, for VimTeX/texlab even when nvim's shell predates the bashrc PATH entry.
+for _, tex_bin in ipairs(vim.fn.glob(dev_prefix .. "/opt/dev-env/tinytex/bin/*", false, true)) do
+	if not vim.env.PATH:find(tex_bin, 1, true) then
+		vim.env.PATH = tex_bin .. ":" .. vim.env.PATH
+	end
+end
+
 local function executable(path)
 	return path and path ~= "" and vim.fn.executable(path) == 1
 end
@@ -452,7 +459,9 @@ require("lazy").setup({
 				},
 			})
 			vim.lsp.config("ruff", { capabilities = capabilities })
-			vim.lsp.enable({ "pyright", "ruff" })
+			-- Completion/diagnostics only; VimTeX does the building.
+			vim.lsp.config("texlab", { capabilities = capabilities })
+			vim.lsp.enable({ "pyright", "ruff", "texlab" })
 
 			vim.api.nvim_create_autocmd("LspAttach", {
 				group = vim.api.nvim_create_augroup("DevEnvLspMaps", { clear = true }),
@@ -696,6 +705,7 @@ require("lazy").setup({
 				"yamlfmt",
 				"google-java-format",
 				"shfmt",
+				"texlab",
 			},
 		},
 	},
@@ -755,6 +765,72 @@ require("lazy").setup({
 			-- No raw HTML in notes; also avoids needing the html parser.
 			html = { enabled = false },
 		},
+	},
+	{
+		-- LaTeX: continuous latexmk build on save (TinyTeX from bootstrap), errors in quickfix,
+		-- TeX motions/text objects. Maps live under <localleader>l (",ll" build, ",lv" view).
+		-- VimTeX must not be lazy-loaded.
+		"lervag/vimtex",
+		lazy = false,
+		init = function()
+			vim.g.vimtex_quickfix_open_on_warning = 0
+			if vim.fn.executable("zathura") == 1 then
+				-- Ctrl+click in zathura jumps to the source; ",lv" jumps to the PDF.
+				-- "zathura" reuses the window via xdotool (X11 only); otherwise use zathura_simple.
+				vim.g.vimtex_view_method = vim.fn.executable("xdotool") == 1 and "zathura" or "zathura_simple"
+			else
+				-- No local viewer (e.g. on an SSH server): just build, don't try to open the PDF.
+				vim.g.vimtex_view_enabled = 0
+			end
+
+			-- Like Overleaf's full TeX Live, without installing it: when a build fails on a missing
+			-- .sty/.cls/.bst/font, install the TeX Live package that provides it and rebuild.
+			local install_missing = vim.fn.stdpath("config") .. "/scripts/tex-install-missing"
+			vim.api.nvim_create_autocmd("User", {
+				pattern = "VimtexEventCompileFailed",
+				group = vim.api.nvim_create_augroup("DevEnvTexMissing", { clear = true }),
+				callback = function()
+					if vim.fn.exists("b:vimtex") == 0 then
+						return
+					end
+					local function get_file(ext)
+						return vim.fn.eval("b:vimtex.compiler.get_file('" .. ext .. "')")
+					end
+					local logs = vim.tbl_filter(function(f)
+						return f ~= ""
+					end, { get_file("log"), get_file("blg") })
+					if #logs == 0 then
+						return
+					end
+
+					local buf = vim.api.nvim_get_current_buf()
+					vim.system(vim.list_extend({ install_missing }, logs), { text = true }, function(res)
+						vim.schedule(function()
+							if res.code ~= 0 then
+								-- 1: nothing to install; stderr names files no package provides.
+								if res.stderr ~= "" then
+									vim.notify(vim.trim(res.stderr), vim.log.levels.WARN)
+								end
+								return
+							end
+							vim.notify(vim.trim(res.stdout:match("Installing[^\n]*") or "") .. ", rebuilding")
+							if not vim.api.nvim_buf_is_valid(buf) then
+								return
+							end
+							vim.api.nvim_buf_call(buf, function()
+								local continuous = vim.fn.eval("b:vimtex.compiler.is_running()") == 1
+								if continuous then
+									vim.cmd("VimtexStop")
+								end
+								-- latexmk skips the rerun when no source changed, so drop its state file.
+								vim.fn.delete(get_file("fdb_latexmk"))
+								vim.cmd(continuous and "VimtexCompile" or "VimtexCompileSS")
+							end)
+						end)
+					end)
+				end,
+			})
+		end,
 	},
 	{
 		-- Images in Kitty/Ghostty/WezTerm; detected at runtime, so a no-op in Alacritty.

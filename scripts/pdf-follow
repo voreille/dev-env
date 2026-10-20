@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Run on the laptop: show a PDF that VimTeX builds on an SSH server in a local zathura.
+# The PDF is copied with rsync every few seconds; zathura reloads the local copy when it changes.
+# (zathura on an sshfs mount does not notice changes made on the server.)
+set -euo pipefail
+
+if [[ $# -lt 1 || "$1" == -h || "$1" == --help ]]; then
+	echo "Usage: $(basename "$0") host:path/to/main.pdf [seconds]" >&2
+	exit 2
+fi
+
+remote="$1"
+interval="${2:-1}"
+host="${remote%%:*}"
+dir="${XDG_CACHE_HOME:-$HOME/.cache}/dev-env/pdf-follow/$host"
+pdf="$dir/$(basename "${remote#*:}")"
+mkdir -p "$dir"
+
+# Reuse one SSH connection instead of opening a new one every second.
+ssh_cmd="ssh -o ControlMaster=auto -o ControlPath=$dir/ssh-%C -o ControlPersist=60"
+
+rsync -t -e "$ssh_cmd" "$remote" "$pdf"
+zathura "$pdf" &
+viewer=$!
+trap 'kill "$viewer" 2>/dev/null || true' EXIT
+
+while kill -0 "$viewer" 2>/dev/null; do
+	sleep "$interval"
+	rsync -tq -e "$ssh_cmd" "$remote" "$pdf" || true
+done

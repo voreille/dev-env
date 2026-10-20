@@ -86,6 +86,22 @@ check_versioned uv uv "$UV_VERSION"
 check_versioned tree-sitter tree-sitter "$TREE_SITTER_VERSION"
 check_versioned ImageMagick magick "${IMAGEMAGICK_VERSION/_/-}"
 
+# TinyTeX is not linked into $BIN_DIR; dotfiles/bash/bashrc puts its bin dir on PATH.
+tinytex="$PREFIX/opt/dev-env/tinytex"
+tex_bin="$(compgen -G "$tinytex/bin/*" | head -n1)"
+if [[ -z "$tex_bin" || ! -x "$tex_bin/pdflatex" ]]; then
+	printf '[miss] %-16s expected %s\n' TinyTeX "$TINYTEX_VERSION"
+	ok=0
+elif [[ "$(readlink "$tinytex")" != */tinytex-"$TINYTEX_VERSION" ]]; then
+	printf '[bad]  %-16s expected %-12s got: %s\n' TinyTeX "$TINYTEX_VERSION" "$(readlink "$tinytex")"
+	ok=0
+elif ! "$tex_bin/kpsewhich" standalone.cls >/dev/null; then
+	printf '[bad]  %-16s missing TeX packages, re-run bootstrap\n' TinyTeX
+	ok=0
+else
+	printf '[ok]   %-16s %-24s %s\n' TinyTeX "$TINYTEX_VERSION" "$tex_bin"
+fi
+
 printf '\nEditor Python tools:\n'
 check_present Pyright pyright-langserver
 check_present Ruff ruff
@@ -117,7 +133,7 @@ check_link shell "$CONFIG_HOME/dev-env/bashrc" "$ROOT/dotfiles/bash/bashrc"
 check_link tmux "$CONFIG_HOME/dev-env/tmux.conf" "$ROOT/dotfiles/tmux/tmux.conf"
 
 printf '\nPATH precedence:\n'
-for cmd in nvim tree-sitter pyright-langserver ruff; do
+for cmd in nvim tree-sitter pyright-langserver ruff pdflatex; do
 	if command -v "$cmd" >/dev/null 2>&1; then
 		printf '[info] %-16s %s\n' "$cmd" "$(command -v "$cmd")"
 	else

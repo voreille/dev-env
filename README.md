@@ -18,6 +18,7 @@ host / SSH server
 │   ├── pyright
 │   ├── ruff
 │   └── debugpy
+├── ~/.local/opt/dev-env/tinytex   <- TinyTeX (pdflatex, latexmk, tlmgr); bin dir put on PATH by the bashrc
 ├── conda environments        <- keep using these while learning the new tools
 ├── ~/workspaces
 ├── /mnt/nas*
@@ -222,6 +223,38 @@ source, e.g. `\min \mathbb{E}\|W\phi(u)-u\|^2` → `min 𝔼‖Wϕ(u)−u‖²`.
 cursor line. Conversion is done by `dotfiles/nvim/scripts/tex2unicode` (pylatexenc + Unicode
 super/subscripts); missing glyphs fall back to `_(...)` / `^(...)`. `:RenderMarkdown toggle` turns
 rendering off.
+
+## LaTeX
+
+Bootstrap installs TinyTeX (a small TeX Live in `~/.local/opt/dev-env/tinytex`). Packages are
+installed on demand: when a VimTeX build fails on a missing `.sty`/`.cls`/`.bst`/font,
+`dotfiles/nvim/scripts/tex-install-missing` finds the TeX Live package that provides it, installs
+it with `tlmgr`, and the build restarts (one round per missing dependency, a few seconds each).
+Outside Neovim, run it on the log by hand: `tex-install-missing paper.log paper.blg`.
+In Neovim, VimTeX builds with `latexmk` and texlab
+(installed by Mason) provides completion and diagnostics:
+
+```text
+,ll   start/stop continuous build (rebuilds on save)
+,lv   show the current line in the PDF
+,le   errors and warnings
+,lt   table of contents
+,lc   clean auxiliary files
+```
+
+**Local machine:** install a viewer once (`sudo apt install zathura xdotool`). `,ll` opens the PDF in
+zathura; Ctrl+click in the PDF jumps to the source line, `,lv` jumps the other way. Without
+`xdotool` (Wayland), VimTeX uses `zathura_simple`, which may open a new window per jump.
+
+**SSH server:** there is no viewer on the server, so VimTeX only builds. On the laptop, run
+
+```bash
+~/dev-env/scripts/pdf-follow server:path/to/main.pdf
+```
+
+which copies the PDF with rsync every second into `~/.cache/dev-env/pdf-follow/` and opens it in
+zathura, which reloads on each build. Needs `rsync` on both machines. Clicking in the PDF does not
+jump to the source in this setup.
 
 ## tmux
 
