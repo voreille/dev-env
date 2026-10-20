@@ -844,6 +844,28 @@ require("lazy").setup({
 				math = { enabled = false },
 			},
 		},
+		init = function()
+			-- Back to a hidden image buffer (<C-^>, :b) snacks re-sends the old placement, which
+			-- Kitty over SSH leaves blank; re-attach like :e does (new placement, no data re-sent).
+			local group = vim.api.nvim_create_augroup("DevEnvImageReattach", { clear = true })
+			vim.api.nvim_create_autocmd("BufWinLeave", {
+				group = group,
+				callback = function(args)
+					if vim.bo[args.buf].filetype == "image" then
+						vim.b[args.buf].dev_env_image_hidden = true
+					end
+				end,
+			})
+			vim.api.nvim_create_autocmd("BufWinEnter", {
+				group = group,
+				callback = function(args)
+					if vim.b[args.buf].dev_env_image_hidden then
+						vim.b[args.buf].dev_env_image_hidden = nil
+						Snacks.image.buf.attach(args.buf)
+					end
+				end,
+			})
+		end,
 	},
 	{
 		"github/copilot.vim",
