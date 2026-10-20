@@ -34,6 +34,17 @@ user-facing doc (workflow, keymaps); this file covers what matters when editing 
   **hardcoded `$HOME/dev-env` path** — the repo is expected to be cloned at `~/dev-env`.
 - `dotfiles/tmux/tmux.conf` — linked to `~/.config/dev-env/tmux.conf`. tmux itself is
   *not* installed by bootstrap (assumed present on servers).
+- `TODO.md` — deferred work (math as images, mermaid, texlab on old glibc).
+
+Two installs deviate from the `ln -sfn` into `$BIN_DIR` pattern on purpose:
+
+- **ImageMagick** comes from conda-forge via a throwaway micromamba in `$TMP` (with a fake
+  `HOME`, so it never registers in `~/.conda/environments.txt`). The upstream AppImage needs
+  glibc ≥ 2.35 and host libs.
+- **TinyTeX** is *not* symlinked: `tlmgr` run through a symlink cannot find `mktexlsr`. Its
+  `bin/<arch>` dir is put on PATH by `dotfiles/bash/bashrc`, by `lazy.lua` (for nvim), and by
+  `dotfiles/nvim/scripts/tex-install-missing` (VimTeX hook that installs missing packages).
+  Doctor checks it via the `tinytex` symlink, not `$BIN_DIR`.
 
 Because configs are symlinks, edits to `dotfiles/` take effect immediately on a machine
 that's already bootstrapped (restart nvim / re-source bash / `tmux source ~/.tmux.conf`).
