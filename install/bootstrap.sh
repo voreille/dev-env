@@ -94,6 +94,7 @@ x86_64 | amd64)
 	RG_ARCH="x86_64"
 	FD_ARCH="x86_64"
 	FZF_ARCH="amd64"
+	CONDA_SUBDIR="linux-64"
 	RUSTUP_TRIPLE="x86_64-unknown-linux-gnu"
 	;;
 aarch64 | arm64)
@@ -103,6 +104,7 @@ aarch64 | arm64)
 	RG_ARCH="aarch64"
 	FD_ARCH="aarch64"
 	FZF_ARCH="arm64"
+	CONDA_SUBDIR="linux-aarch64"
 	RUSTUP_TRIPLE="aarch64-unknown-linux-gnu"
 	;;
 *)
@@ -278,6 +280,32 @@ install_tree_sitter() {
 	ln -sfn "$dst/bin/tree-sitter" "$BIN_DIR/tree-sitter"
 }
 
+install_imagemagick() {
+	local version="${IMAGEMAGICK_VERSION/_/-}"
+	if version_matches magick "$version"; then
+		echo "ImageMagick $version already installed"
+		return
+	fi
+
+	# The upstream AppImage needs GLIBC >= 2.35 and host libraries; conda-forge builds
+	# target GLIBC 2.17 and bundle every dependency (ghostscript for PDF, rsvg for SVG).
+	# micromamba, its package cache and its HOME live only in $TMP and are removed when
+	# bootstrap exits; the fake HOME keeps it out of ~/.conda/environments.txt and ~/.condarc.
+	echo "Installing ImageMagick $version (conda-forge)"
+	local dst="$OPT_DIR/imagemagick-$IMAGEMAGICK_VERSION"
+	local micromamba="$TMP/micromamba"
+	rm -rf "$dst"
+	download \
+		"https://github.com/mamba-org/micromamba-releases/releases/download/${MICROMAMBA_VERSION}/micromamba-${CONDA_SUBDIR}" \
+		"$micromamba"
+	chmod 0755 "$micromamba"
+	mkdir -p "$TMP/mamba-home"
+	HOME="$TMP/mamba-home" MAMBA_ROOT_PREFIX="$TMP/mamba-root" "$micromamba" create --yes --quiet \
+		--prefix "$dst" --override-channels --channel conda-forge \
+		"imagemagick=$IMAGEMAGICK_VERSION"
+	ln -sfn "$dst/bin/magick" "$BIN_DIR/magick"
+}
+
 install_python_tools() {
 	echo "Installing editor Python tooling using host python3"
 	"$BIN_DIR/uv" venv --python "$(command -v python3)" --clear "$TOOLS_VENV"
@@ -345,6 +373,7 @@ if [[ "$TOOLS" == 1 ]]; then
 	install_fzf
 	install_uv
 	install_tree_sitter
+	install_imagemagick
 	install_python_tools
 fi
 

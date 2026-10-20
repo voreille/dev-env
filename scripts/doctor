@@ -84,6 +84,7 @@ check_versioned fd fd "$FD_VERSION"
 check_versioned fzf fzf "$FZF_VERSION"
 check_versioned uv uv "$UV_VERSION"
 check_versioned tree-sitter tree-sitter "$TREE_SITTER_VERSION"
+check_versioned ImageMagick magick "${IMAGEMAGICK_VERSION/_/-}"
 
 printf '\nEditor Python tools:\n'
 check_present Pyright pyright-langserver

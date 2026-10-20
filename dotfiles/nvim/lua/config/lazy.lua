@@ -757,6 +757,19 @@ require("lazy").setup({
 		},
 	},
 	{
+		-- Images in Kitty/Ghostty/WezTerm; detected at runtime, so a no-op in Alacritty.
+		"folke/snacks.nvim",
+		lazy = false,
+		priority = 1000,
+		opts = {
+			image = {
+				enabled = true,
+				-- Math stays with render-markdown's Unicode converter for now.
+				math = { enabled = false },
+			},
+		},
+	},
+	{
 		"github/copilot.vim",
 		event = "InsertEnter",
 	},

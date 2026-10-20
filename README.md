@@ -14,6 +14,7 @@ host / SSH server
 │   ├── lazygit
 │   ├── rg / fd / fzf
 │   ├── uv
+│   ├── magick                <- ImageMagick (conda-forge build) for images in nvim (snacks.image)
 │   ├── pyright
 │   ├── ruff
 │   └── debugpy
