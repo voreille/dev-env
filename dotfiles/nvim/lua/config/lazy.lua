@@ -133,6 +133,13 @@ require("lazy").setup({
 				desc = "Live grep",
 			},
 			{
+				"<leader>fw",
+				function()
+					require("fzf-lua").grep_cword()
+				end,
+				desc = "Grep word under cursor",
+			},
+			{
 				"<leader>b",
 				function()
 					require("fzf-lua").buffers()

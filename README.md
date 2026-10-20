@@ -123,6 +123,7 @@ Ctrl-p        find files
 Space p       document symbols/functions
 Space f S     workspace symbols
 Space f g     grep project text
+Space f w     grep word under cursor
 Space f b     buffers
 Space f r     recent files
 
