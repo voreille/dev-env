@@ -36,6 +36,11 @@ map("n", "<leader>dn", function()
 end, { desc = "Diagnostic: next" })
 map("n", "<leader>de", vim.diagnostic.open_float, { desc = "Diagnostic: details" })
 
+-- Backtick text objects. ` is a dead key on Swiss French QWERTZ, so ci` needs
+-- Shift+^ then Space; ciq / daq / viq do the same with one key.
+map({ "o", "x" }, "iq", "i`", { desc = "Inside backticks" })
+map({ "o", "x" }, "aq", "a`", { desc = "Around backticks" })
+
 -- buffer movement
 map("n", "<leader><leader>", "<C-^>", { desc = "Previous buffer" })
 
