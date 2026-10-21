@@ -28,8 +28,10 @@ fi
 
 dir="${XDG_CACHE_HOME:-$HOME/.cache}/dev-env/pdf-follow/$host"
 mkdir -p "$dir"
-# Reuse one SSH connection instead of opening a new one every second.
+# Reuse one SSH connection instead of opening a new one every second. The keepalives make a
+# master whose network dropped exit within ~15s; otherwise every later ssh/rsync hangs on it.
 ssh_cmd="ssh -o ControlMaster=auto -o ControlPath=$dir/ssh-%C -o ControlPersist=60"
+ssh_cmd+=" -o ServerAliveInterval=5 -o ServerAliveCountMax=3 -o ConnectTimeout=10"
 
 # Activate the terminal window of the interactive `ssh`/`kitten ssh` to $host (ours carry $dir
 # in their arguments and are skipped), like VimTeX's xdo_focus_vim but without moving the mouse.
