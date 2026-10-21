@@ -102,6 +102,18 @@ else
 	printf '[ok]   %-16s %-24s %s\n' TinyTeX "$TINYTEX_VERSION" "$tex_bin"
 fi
 
+# Node.js is only for Copilot and not linked into $BIN_DIR either (lazy.lua uses it directly).
+node="$PREFIX/opt/dev-env/node/bin/node"
+if [[ ! -x "$node" ]]; then
+	printf '[miss] %-16s expected %s\n' Node.js "$NODE_VERSION"
+	ok=0
+elif [[ "$("$node" --version 2>&1)" != "v$NODE_VERSION" ]]; then
+	printf '[bad]  %-16s expected %-12s got: %s\n' Node.js "$NODE_VERSION" "$("$node" --version 2>&1 | head -n1)"
+	ok=0
+else
+	printf '[ok]   %-16s %-24s %s\n' Node.js "$NODE_VERSION" "$node"
+fi
+
 printf '\nEditor Python tools:\n'
 check_present Pyright pyright-langserver
 check_present Ruff ruff

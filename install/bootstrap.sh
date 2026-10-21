@@ -87,9 +87,10 @@ prune_old_versions() {
 		[tree-sitter]="$TREE_SITTER_VERSION"
 		[imagemagick]="$IMAGEMAGICK_VERSION"
 		[tinytex]="$TINYTEX_VERSION"
+		[node]="$NODE_VERSION"
 	)
 	local link in_use=() tool dir used removed=0
-	for link in "$BIN_DIR"/* "$OPT_DIR/tinytex"; do
+	for link in "$BIN_DIR"/* "$OPT_DIR/tinytex" "$OPT_DIR/node"; do
 		[[ -L "$link" ]] && in_use+=("$(readlink -f "$link")")
 	done
 
@@ -142,6 +143,7 @@ x86_64 | amd64)
 	CONDA_SUBDIR="linux-64"
 	TINYTEX_ARCH="x86_64"
 	TEX_ARCH="x86_64-linux"
+	NODE_ARCH="x64"
 	RUSTUP_TRIPLE="x86_64-unknown-linux-gnu"
 	;;
 aarch64 | arm64)
@@ -154,6 +156,7 @@ aarch64 | arm64)
 	CONDA_SUBDIR="linux-aarch64"
 	TINYTEX_ARCH="arm64"
 	TEX_ARCH="aarch64-linux"
+	NODE_ARCH="arm64"
 	RUSTUP_TRIPLE="aarch64-unknown-linux-gnu"
 	;;
 *)
@@ -394,6 +397,38 @@ install_tinytex() {
 	fi
 }
 
+# Node.js only for the Copilot language server. With a host node older than 22 the server runs a
+# bundled binary instead, which leaves a /tmp/github-copilot-* dir behind on every start. Like
+# TinyTeX it is not linked into $BIN_DIR (it must not shadow a host or project node): lazy.lua
+# points copilot.vim at $OPT_DIR/node.
+install_node() {
+	local dst="$OPT_DIR/node-$NODE_VERSION"
+	if [[ "$FORCE" == 0 && -x "$dst/bin/node" ]]; then
+		echo "Node.js $NODE_VERSION already installed"
+	else
+		local name="node-v${NODE_VERSION}-linux-${NODE_ARCH}"
+		local url="https://nodejs.org/dist/v${NODE_VERSION}"
+		local glibc
+		glibc="$(getconf GNU_LIBC_VERSION 2>/dev/null | awk '{print $2}')"
+		# Official builds need glibc >= 2.28; unofficial-builds has an x64 build for glibc 2.17.
+		if [[ -n "$glibc" && "$(printf '%s\n' 2.28 "$glibc" | sort -V | head -n1)" != 2.28 ]]; then
+			if [[ "$NODE_ARCH" != x64 ]]; then
+				echo "Skipping Node.js: no $arch build for glibc $glibc (Copilot keeps the host node)" >&2
+				return
+			fi
+			name+="-glibc-217"
+			url="https://unofficial-builds.nodejs.org/download/release/v${NODE_VERSION}"
+		fi
+
+		echo "Installing Node.js $NODE_VERSION"
+		rm -rf "$dst" "$TMP/$name"
+		download "$url/$name.tar.xz" "$TMP/node.tar.xz"
+		tar -xJf "$TMP/node.tar.xz" -C "$TMP"
+		mv "$TMP/$name" "$dst"
+	fi
+	ln -sfn "$dst" "$OPT_DIR/node"
+}
+
 install_python_tools() {
 	echo "Installing editor Python tooling using host python3"
 	"$BIN_DIR/uv" venv --python "$(command -v python3)" --clear "$TOOLS_VENV"
@@ -464,6 +499,7 @@ if [[ "$TOOLS" == 1 ]]; then
 	install_tree_sitter
 	install_imagemagick
 	install_tinytex
+	install_node
 	install_python_tools
 fi
 

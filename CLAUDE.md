@@ -37,7 +37,7 @@ user-facing doc (workflow, keymaps); this file covers what matters when editing 
   *not* installed by bootstrap (assumed present on servers).
 - `TODO.md` — deferred work (math as images, mermaid, texlab on old glibc).
 
-Two installs deviate from the `ln -sfn` into `$BIN_DIR` pattern on purpose:
+Three installs deviate from the `ln -sfn` into `$BIN_DIR` pattern on purpose:
 
 - **ImageMagick** comes from conda-forge via a throwaway micromamba in `$TMP` (with a fake
   `HOME`, so it never registers in `~/.conda/environments.txt`). The upstream AppImage needs
@@ -46,6 +46,10 @@ Two installs deviate from the `ln -sfn` into `$BIN_DIR` pattern on purpose:
   `bin/<arch>` dir is put on PATH by `dotfiles/bash/bashrc`, by `lazy.lua` (for nvim), and by
   `dotfiles/nvim/scripts/tex-install-missing` (VimTeX hook that installs missing packages).
   Doctor checks it via the `tinytex` symlink, not `$BIN_DIR`.
+- **Node.js** is *not* symlinked either, so it never shadows a host or project `node`. It only
+  serves the Copilot language server (needs Node >= 22; older host nodes make it run a bundled
+  binary that leaks `/tmp/github-copilot-*` dirs). `lazy.lua` sets `g:copilot_node_command` to
+  `$OPT_DIR/node/bin/node` and disables npx. On glibc < 2.28 the x64 unofficial glibc-217 build is used.
 
 Because configs are symlinks, edits to `dotfiles/` take effect immediately on a machine
 that's already bootstrapped (restart nvim / re-source bash / `tmux source ~/.tmux.conf`).

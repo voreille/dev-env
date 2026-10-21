@@ -19,6 +19,7 @@ host / SSH server
 │   ├── ruff
 │   └── debugpy
 ├── ~/.local/opt/dev-env/tinytex   <- TinyTeX (pdflatex, latexmk, tlmgr); bin dir put on PATH by the bashrc
+├── ~/.local/opt/dev-env/node      <- Node.js for the Copilot language server only; not on PATH
 ├── conda environments        <- keep using these while learning the new tools
 ├── ~/workspaces
 ├── /mnt/nas*

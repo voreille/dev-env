@@ -1001,6 +1001,17 @@ require("lazy").setup({
 	{
 		"github/copilot.vim",
 		event = "InsertEnter",
+		cmd = "Copilot",
+		init = function()
+			-- The server needs Node >= 22; with an older host node it runs a bundled binary that
+			-- leaves a /tmp/github-copilot-* dir behind on every start. Use bootstrap's Node, and
+			-- skip npx, which would start the server with the host node again.
+			local node = dev_prefix .. "/opt/dev-env/node/bin/node"
+			if executable(node) then
+				vim.g.copilot_node_command = node
+				vim.g.copilot_npx_command = ""
+			end
+		end,
 	},
 }, {
 	checker = { enabled = false },
