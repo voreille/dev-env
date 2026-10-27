@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Open a tmux pane's whole scrollback in nvim, in a new window right after
+# the pane's window (M-t jumps back and forth).
+# Bound to prefix-v in tmux.conf: scrollback-nvim <pane_id>
+set -euo pipefail
+
+pane="$1"
+f="$(mktemp "${TMPDIR:-/tmp}/tmux-scrollback.XXXXXX")"
+
+# -J joins wrapped lines but pads them with trailing spaces: strip those, and
+# drop the blank lines below the last output.
+tmux capture-pane -pJ -S - -t "$pane" |
+	awk '{ sub(/[ \t]+$/, "") } /./ { while (n > 0) { print ""; n-- } print; next } { n++ }' >"$f"
+
+# new-window -t takes a window, not a pane ("can't specify pane here").
+win="$(tmux display-message -p -t "$pane" '#{window_id}')"
+tmux new-window -a -t "$win" -n scrollback "nvim + '$f'; rm -f '$f'"

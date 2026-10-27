@@ -268,7 +268,7 @@ The repo includes a tmux config, but the bootstrap intentionally does **not** tr
 
 If `tmux` exists, `~/.tmux.conf` sources the repo config after bootstrap. If it is absent, the rest of the setup still works.
 
-To copy command output with full nvim motions, `Ctrl-b v` opens the pane's whole scrollback in nvim in a new window (`:q` returns). `Ctrl-b V` is plain tmux copy-mode (vi keys). To edit the current bash command line in nvim, use `Ctrl-x Ctrl-e`.
+To copy command output with full nvim motions, `Ctrl-b v` opens the pane's whole scrollback in nvim (trailing spaces stripped) in a new window right after the current one: `M-t` jumps back to paste, `:q` closes it. `Ctrl-b V` is plain tmux copy-mode (vi keys). To edit the current bash command line in nvim, use `Ctrl-x Ctrl-e`.
 
 ## Why uv is already installed
 
