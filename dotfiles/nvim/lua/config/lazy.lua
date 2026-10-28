@@ -861,6 +861,12 @@ require("lazy").setup({
 				group = vim.api.nvim_create_augroup("DevEnvVimtexFocus", { clear = true }),
 				command = "if exists('b:vimtex.viewer') | let b:vimtex.viewer.xdo_focus_vim = function('DevEnvVimtexFocusVim') | endif",
 			})
+			-- ",lv" with a local zathura also focuses it (on SSH, scripts/pdf-follow does that).
+			vim.api.nvim_create_autocmd("User", {
+				pattern = "VimtexEventView",
+				group = vim.api.nvim_create_augroup("DevEnvVimtexFocusViewer", { clear = true }),
+				command = "if exists('b:vimtex.viewer.xdo_focus_viewer') | call b:vimtex.viewer.xdo_focus_viewer() | endif",
+			})
 
 			-- Like Overleaf's full TeX Live, without installing it: when a build fails on a missing
 			-- .sty/.cls/.bst/font, install the TeX Live package that provides it and rebuild.

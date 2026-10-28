@@ -7,7 +7,8 @@
 #                            on the server (SyncTeX records server paths), then focuses the
 #                            local terminal window that runs ssh to the server.
 #   ,lv in the server nvim -> dotfiles/nvim/scripts/vimtex-forward-request leaves a request in
-#                             ~/.cache/dev-env/vimtex-forward, polled here and passed to zathura.
+#                             ~/.cache/dev-env/vimtex-forward, polled here and passed to zathura,
+#                             whose window is then focused.
 set -euo pipefail
 
 usage() {
@@ -79,6 +80,15 @@ forward() {
 	IFS=$'\t' read -r line col tex request_pdf <<<"$request"
 	[[ "$(basename "$request_pdf")" == "$(basename "$pdf")" ]] || return 0
 	zathura --synctex-forward "$line:$col:$tex" "$pdf" || true
+	focus_viewer
+}
+
+# Activate our zathura window (no mouse warp), the counterpart of focus_ssh_window.
+focus_viewer() {
+	command -v xdotool >/dev/null || return 0
+	local win
+	win="$(xdotool search --onlyvisible --pid "$viewer" 2>/dev/null | tail -n1 || true)"
+	[[ -z "$win" ]] || xdotool windowactivate "$win" 2>/dev/null || true
 }
 
 rsync -t -e "$ssh_cmd" "$remote" "$pdf"

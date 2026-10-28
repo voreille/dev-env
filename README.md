@@ -258,7 +258,7 @@ It copies the PDF and its SyncTeX file with rsync every second into
 `~/.cache/dev-env/pdf-follow/` and opens zathura, which reloads on each build. SyncTeX works both
 ways over the same SSH connection: Ctrl+click in zathura moves the server's nvim and focuses the
 terminal window running `ssh`/`kitten ssh` to that server (needs `xdotool`), and `,lv` in the
-server's nvim moves zathura (within a second). Needs `rsync` on both machines and dev-env's nvim at
+server's nvim moves zathura and focuses it (within a second). Needs `rsync` on both machines and dev-env's nvim at
 `~/.local/bin/nvim` on the server. Don't copy build files (`*.synctex.gz`, `*.fdb_latexmk`, …)
 between machines: SyncTeX records absolute paths, so clicks would point at the other machine.
 
