@@ -612,6 +612,8 @@ require("lazy").setup({
 				java = { "google-java-format" },
 				sh = { "shfmt" },
 				bash = { "shfmt" },
+				-- Also hard-wraps lines longer than 80 columns.
+				tex = { "tex-fmt" },
 			},
 			format_on_save = function(bufnr)
 				if vim.bo[bufnr].filetype == "python" then

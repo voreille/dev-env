@@ -14,6 +14,7 @@ host / SSH server
 │   ├── lazygit
 │   ├── rg / fd / fzf
 │   ├── uv
+│   ├── tex-fmt               <- LaTeX formatter (hard-wraps long lines), used by <leader>lf
 │   ├── magick                <- ImageMagick (conda-forge build) for images in nvim (snacks.image)
 │   ├── pyright
 │   ├── ruff
@@ -242,6 +243,10 @@ In Neovim, VimTeX builds with `latexmk` and texlab
 ,lt   table of contents
 ,lc   clean auxiliary files
 ```
+
+`<leader>lf` formats the file with `tex-fmt`: indents environments and hard-wraps lines longer
+than 80 columns (real newlines in the source; the PDF is unchanged). Not run on save. A
+`tex-fmt.toml` in the project root overrides the defaults, e.g. `wraplen = 100` or `wrap = false`.
 
 **Local machine:** install a viewer once (`sudo apt install zathura xdotool`). `,ll` opens the PDF in
 zathura; Ctrl+click in the PDF jumps to the source line, `,lv` jumps the other way. Without

@@ -87,6 +87,7 @@ prune_old_versions() {
 		[tree-sitter]="$TREE_SITTER_VERSION"
 		[imagemagick]="$IMAGEMAGICK_VERSION"
 		[tinytex]="$TINYTEX_VERSION"
+		[tex-fmt]="$TEX_FMT_VERSION"
 		[node]="$NODE_VERSION"
 	)
 	local link in_use=() tool dir used removed=0
@@ -143,6 +144,8 @@ x86_64 | amd64)
 	CONDA_SUBDIR="linux-64"
 	TINYTEX_ARCH="x86_64"
 	TEX_ARCH="x86_64-linux"
+	# The x86_64-linux build needs glibc >= 2.34; the alpine one is static.
+	TEX_FMT_TARGET="x86_64-alpine"
 	NODE_ARCH="x64"
 	RUSTUP_TRIPLE="x86_64-unknown-linux-gnu"
 	;;
@@ -156,6 +159,7 @@ aarch64 | arm64)
 	CONDA_SUBDIR="linux-aarch64"
 	TINYTEX_ARCH="arm64"
 	TEX_ARCH="aarch64-linux"
+	TEX_FMT_TARGET="aarch64-linux"
 	NODE_ARCH="arm64"
 	RUSTUP_TRIPLE="aarch64-unknown-linux-gnu"
 	;;
@@ -401,6 +405,24 @@ install_tinytex() {
 # bundled binary instead, which leaves a /tmp/github-copilot-* dir behind on every start. Like
 # TinyTeX it is not linked into $BIN_DIR (it must not shadow a host or project node): lazy.lua
 # points copilot.vim at $OPT_DIR/node.
+install_tex_fmt() {
+	if version_matches tex-fmt "$TEX_FMT_VERSION"; then
+		echo "tex-fmt $TEX_FMT_VERSION already installed"
+		return
+	fi
+
+	echo "Installing tex-fmt $TEX_FMT_VERSION"
+	local dst="$OPT_DIR/tex-fmt-$TEX_FMT_VERSION"
+	rm -rf "$dst"
+	mkdir -p "$dst/bin"
+	download \
+		"https://github.com/WGUNDERWOOD/tex-fmt/releases/download/v${TEX_FMT_VERSION}/tex-fmt-${TEX_FMT_TARGET}.tar.gz" \
+		"$TMP/tex-fmt.tar.gz"
+	tar -xzf "$TMP/tex-fmt.tar.gz" -C "$TMP"
+	install -m 0755 "$TMP/tex-fmt" "$dst/bin/tex-fmt"
+	ln -sfn "$dst/bin/tex-fmt" "$BIN_DIR/tex-fmt"
+}
+
 install_node() {
 	local dst="$OPT_DIR/node-$NODE_VERSION"
 	if [[ "$FORCE" == 0 && -x "$dst/bin/node" ]]; then
@@ -499,6 +521,7 @@ if [[ "$TOOLS" == 1 ]]; then
 	install_tree_sitter
 	install_imagemagick
 	install_tinytex
+	install_tex_fmt
 	install_node
 	install_python_tools
 fi

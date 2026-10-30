@@ -85,6 +85,7 @@ check_versioned fzf fzf "$FZF_VERSION"
 check_versioned uv uv "$UV_VERSION"
 check_versioned tree-sitter tree-sitter "$TREE_SITTER_VERSION"
 check_versioned ImageMagick magick "${IMAGEMAGICK_VERSION/_/-}"
+check_versioned tex-fmt tex-fmt "$TEX_FMT_VERSION"
 
 # TinyTeX is not linked into $BIN_DIR; dotfiles/bash/bashrc puts its bin dir on PATH.
 tinytex="$PREFIX/opt/dev-env/tinytex"
